@@ -2,7 +2,7 @@ manifestVersion: 1
 id: marionuevo-nginx-md
 category: networking
 name: Nginx Md
-version: "1.0.1"
+version: "1.0.2"
 tagline: Servidor nginx para mis sitios estáticos
 description: >
   Sirve las webs y configuración desde mi carpeta de Downloads.
