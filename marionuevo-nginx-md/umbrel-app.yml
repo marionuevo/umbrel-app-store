@@ -1,0 +1,17 @@
+manifestVersion: 1
+id: mario2stops-nginx-sites
+category: networking
+name: Nginx Md
+version: "1.0.0"
+tagline: Servidor nginx para mis sitios estáticos
+description: >
+  Sirve las webs y configuración desde mi carpeta de Downloads.
+developer: Mario
+website:
+dependencies: []
+repo: https://github.com/marionuevo/nginx-md-umbrel
+support: https://github.com/marionuevo/nginx-md-umbrel
+port: 9088
+gallery: []
+releaseNotes: >
+  Primera versión.

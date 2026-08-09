@@ -1,0 +1,11 @@
+version: "3.7"
+
+services:
+  web:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "9088:80"
+    volumes:
+      - /home/umbrel/umbrel/home/Downloads/webs/config:/etc/nginx/conf.d
+      - /home/umbrel/umbrel/home/Downloads/webs/sites:/var/www/sites:ro
