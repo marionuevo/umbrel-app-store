@@ -7,5 +7,5 @@ services:
     ports:
       - "9088:80"
     volumes:
-      - /home/umbrel/umbrel/home/Downloads/webs/config:/etc/nginx/conf.d
+      - /home/umbrel/umbrel/home/Downloads/webs/config/nginx/conf.d:/etc/nginx/conf.d
       - /home/umbrel/umbrel/home/Downloads/webs/sites:/var/www/sites:ro
