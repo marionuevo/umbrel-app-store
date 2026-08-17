@@ -1,13 +1,13 @@
 manifestVersion: 1
 id: marionuevo-nginx-md
+icon: https://raw.githubusercontent.com/marionuevo/nginx-md-umbrel/main/marionuevo-nginx-md/icon.svg
 category: networking
 name: Nginx Md
-version: "1.0.2"
+version: "1.0.3"
 tagline: Servidor nginx para mis sitios estáticos
 description: >
-  Sirve las webs y configuración desde mi carpeta de Downloads.
+  Sirve las webs y configuración desde mi carpeta de websites.
 developer: Mario
-website:
 dependencies: []
 repo: https://github.com/marionuevo/nginx-md-umbrel
 support: https://github.com/marionuevo/nginx-md-umbrel
