@@ -3,7 +3,7 @@ id: marionuevo-tailscale-subnet
 icon: https://raw.githubusercontent.com/marionuevo/nginx-md-umbrel/main/marionuevo-tailscale-subnet/icon.svg
 category: networking
 name: Tailscale Subnet Router
-version: "1.0.0"
+version: "1.1.0"
 tagline: Subnet router de Tailscale para las VLAN de casa
 description: >
   Levanta tailscaled como subnet router, anunciando las cinco VLAN de la LAN
@@ -26,7 +26,10 @@ support: https://github.com/marionuevo/nginx-md-umbrel
 port: 41641
 gallery: []
 releaseNotes: >
-  Primera versión, migrada del stack de docker compose de la fase 1.
-  Mantiene la versión de imagen fijada en v1.80.3 y el estado de
-  autenticación existente, así que no hace falta reautenticar ni volver a
-  aprobar rutas.
+  Actualizada la imagen de v1.80.3 a v1.102.3, que arrastraba 18 meses de
+  desfase. Es la misma versión que corren los clientes, así que desaparece la
+  diferencia entre los dos extremos.
+
+
+  El estado de autenticación no se toca: sigue el mismo nodo, con sus rutas y
+  su exit node. Para volver atrás basta con revertir la etiqueta de la imagen.
