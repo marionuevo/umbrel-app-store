@@ -1,6 +1,6 @@
 manifestVersion: 1
 id: marionuevo-tailscale-subnet
-icon: https://raw.githubusercontent.com/marionuevo/nginx-md-umbrel/main/marionuevo-tailscale-subnet/icon.svg
+icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-tailscale-subnet/icon.svg
 category: networking
 name: Tailscale Subnet Router
 version: "1.1.0"
@@ -21,8 +21,8 @@ description: >
   contenedor y sigue viviendo en la unidad systemd tailscale-gro.service.
 developer: Mario
 dependencies: []
-repo: https://github.com/marionuevo/nginx-md-umbrel
-support: https://github.com/marionuevo/nginx-md-umbrel
+repo: https://github.com/marionuevo/umbrel-app-store
+support: https://github.com/marionuevo/umbrel-app-store
 port: 41641
 gallery: []
 releaseNotes: >
