@@ -1,6 +1,6 @@
 manifestVersion: 1
 id: marionuevo-nginx-md
-icon: https://raw.githubusercontent.com/marionuevo/nginx-md-umbrel/main/marionuevo-nginx-md/icon.svg
+icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-nginx-md/icon.svg
 category: networking
 name: Nginx Md
 version: "1.0.3"
@@ -9,8 +9,8 @@ description: >
   Sirve las webs y configuración desde mi carpeta de websites.
 developer: Mario
 dependencies: []
-repo: https://github.com/marionuevo/nginx-md-umbrel
-support: https://github.com/marionuevo/nginx-md-umbrel
+repo: https://github.com/marionuevo/umbrel-app-store
+support: https://github.com/marionuevo/umbrel-app-store
 port: 9088
 gallery: []
 releaseNotes: >
