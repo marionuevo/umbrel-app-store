@@ -3,7 +3,7 @@ id: marionuevo-nginx-md
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-nginx-md/icon.svg
 category: networking
 name: Nginx Md
-version: "1.0.3"
+version: "1.1.0"
 tagline: Servidor nginx para mis sitios estáticos
 description: >
   Sirve las webs y configuración desde mi carpeta de websites.
@@ -14,4 +14,6 @@ support: https://github.com/marionuevo/umbrel-app-store
 port: 9088
 gallery: []
 releaseNotes: >
-  Primera versión.
+  Los logs pasan a un volumen del anfitrión y se añade 00-stats.conf, que
+  recupera la IP real del visitante desde CF-Connecting-IP y escribe una línea
+  JSON por petición para la app de Estadísticas Web.

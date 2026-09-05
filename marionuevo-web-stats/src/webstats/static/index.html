@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Estadísticas web</title>
+<link rel="stylesheet" href="/estilo.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📊</text></svg>">
+</head>
+<body>
+
+<header class="cabecera">
+  <div class="titulo">
+    <h1>Estadísticas web</h1>
+    <p class="sub" id="sub">Cargando…</p>
+  </div>
+  <div class="cabecera-dcha">
+    <div class="ahora" id="ahora" hidden>
+      <span class="pulso" aria-hidden="true"></span>
+      <span><strong id="activos">0</strong> <span class="ahora-txt">ahora mismo</span></span>
+    </div>
+    <button type="button" id="tema" class="btn-icono" title="Cambiar tema" aria-label="Cambiar tema">◐</button>
+  </div>
+</header>
+
+<!-- Una sola fila de filtros para todo lo que hay debajo. -->
+<div class="filtros" role="group" aria-label="Filtros">
+  <label class="filtro">
+    <span>Periodo</span>
+    <select id="f-rango">
+      <option value="1h">Última hora</option>
+      <option value="6h">Últimas 6 horas</option>
+      <option value="24h" selected>Últimas 24 horas</option>
+      <option value="7d">Últimos 7 días</option>
+      <option value="30d">Últimos 30 días</option>
+      <option value="todo">Todo</option>
+    </select>
+  </label>
+  <label class="filtro">
+    <span>Sitio</span>
+    <select id="f-sitio"><option value="todos">Todos</option></select>
+  </label>
+  <label class="filtro">
+    <span>Tráfico</span>
+    <select id="f-tipo">
+      <option value="persona" selected>Personas</option>
+      <option value="bot">Bots y buscadores</option>
+      <option value="sondeo">Sondeos</option>
+      <option value="todos">Todo</option>
+    </select>
+  </label>
+  <div class="filtro-nota" id="nota-filtro"></div>
+</div>
+
+<main id="panel" aria-busy="true">
+
+  <section class="tarjetas" aria-label="Resumen">
+    <div class="tarjeta">
+      <span class="t-etq">Páginas vistas</span>
+      <span class="t-num" id="k-paginas">–</span>
+      <span class="t-pie" id="k-paginas-pie"></span>
+    </div>
+    <div class="tarjeta">
+      <span class="t-etq">Visitantes únicos</span>
+      <span class="t-num" id="k-visitantes">–</span>
+      <span class="t-pie" id="k-visitantes-pie"></span>
+    </div>
+    <div class="tarjeta">
+      <span class="t-etq">Peticiones</span>
+      <span class="t-num" id="k-peticiones">–</span>
+      <span class="t-pie" id="k-peticiones-pie"></span>
+    </div>
+    <div class="tarjeta">
+      <span class="t-etq">Tráfico servido</span>
+      <span class="t-num" id="k-bytes">–</span>
+      <span class="t-pie" id="k-bytes-pie"></span>
+    </div>
+    <div class="tarjeta">
+      <span class="t-etq">Respuesta media</span>
+      <span class="t-num" id="k-rt">–</span>
+      <span class="t-pie" id="k-rt-pie"></span>
+    </div>
+  </section>
+
+  <section class="grafico-caja" aria-label="Actividad en el tiempo">
+    <div class="g-cabecera">
+      <h2>Actividad</h2>
+      <div class="g-acciones">
+        <div class="leyenda" id="leyenda-actividad"></div>
+        <button type="button" class="btn-tabla" data-para="actividad">Ver tabla</button>
+      </div>
+    </div>
+    <div class="g-lienzo" id="g-actividad"></div>
+    <div class="g-tabla" id="tabla-actividad" hidden></div>
+  </section>
+
+  <section class="grafico-caja" aria-label="Tráfico en el tiempo">
+    <div class="g-cabecera">
+      <h2>Tráfico</h2>
+      <div class="g-acciones">
+        <div class="leyenda" id="leyenda-trafico"></div>
+        <button type="button" class="btn-tabla" data-para="trafico">Ver tabla</button>
+      </div>
+    </div>
+    <div class="g-lienzo" id="g-trafico"></div>
+    <div class="g-tabla" id="tabla-trafico" hidden></div>
+  </section>
+
+  <section class="rejilla">
+    <div class="panel-caja" id="c-sitios"></div>
+    <div class="panel-caja" id="c-paginas"></div>
+    <div class="panel-caja" id="c-paises"></div>
+    <div class="panel-caja" id="c-procedencias"></div>
+    <div class="panel-caja" id="c-navegadores"></div>
+    <div class="panel-caja" id="c-sistemas"></div>
+    <div class="panel-caja" id="c-dispositivos"></div>
+    <div class="panel-caja" id="c-estados"></div>
+    <div class="panel-caja" id="c-sondeos"></div>
+  </section>
+
+  <section class="grafico-caja" aria-label="Peticiones en vivo">
+    <div class="g-cabecera">
+      <h2>En vivo</h2>
+      <div class="g-acciones">
+        <span class="estado-vivo" id="estado-vivo">conectando…</span>
+      </div>
+    </div>
+    <div class="vivo" id="vivo" role="log" aria-live="polite"></div>
+  </section>
+
+</main>
+
+<footer class="pie">
+  <span id="pie-txt"></span>
+</footer>
+
+<div id="tooltip" class="tooltip" hidden role="tooltip"></div>
+
+<script src="/panel.js"></script>
+</body>
+</html>

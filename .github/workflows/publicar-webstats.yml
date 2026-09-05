@@ -1,0 +1,65 @@
+# Construye y publica la imagen de la app de estadísticas en GHCR.
+#
+# Usa el GITHUB_TOKEN que Actions inyecta solo: no hace falta guardar ningún
+# secreto. La primera vez que corre crea el paquete como PRIVADO, y hay que
+# ponerlo público a mano una vez para que el Umbrel pueda descargarlo sin
+# credenciales:
+#   github.com/users/marionuevo/packages/container/webstats/settings
+name: Publicar imagen de webstats
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "marionuevo-web-stats/**"
+      - ".github/workflows/publicar-webstats.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Leer la versión del manifiesto
+        id: version
+        run: |
+          v=$(grep -E '^version:' marionuevo-web-stats/umbrel-app.yml \
+              | head -1 | sed -E 's/.*"(.*)".*/\1/')
+          echo "valor=$v" >> "$GITHUB_OUTPUT"
+          echo "Versión: $v"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construir y publicar
+        id: construir
+        uses: docker/build-push-action@v6
+        with:
+          context: marionuevo-web-stats
+          push: true
+          # El Umbrel es x86_64; arm64 va casi gratis porque no se compila nada
+          # y deja la puerta abierta a una Pi.
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/webstats:${{ steps.version.outputs.valor }}
+            ghcr.io/${{ github.repository_owner }}/webstats:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Digest para fijar en el compose
+        run: |
+          echo "## Imagen publicada" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "ghcr.io/${{ github.repository_owner }}/webstats:${{ steps.version.outputs.valor }}@${{ steps.construir.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

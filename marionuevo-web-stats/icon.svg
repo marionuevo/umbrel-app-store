@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2A78D6"/>
+      <stop offset="1" stop-color="#184F95"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" fill="url(#bg)"/>
+  <rect x="44" y="52" width="168" height="152" rx="12" fill="#ffffff" fill-opacity="0.96"/>
+  <!-- Barras: la altura es el dato, el color no compite con ella. -->
+  <rect x="68"  y="140" width="20" height="40" rx="5" fill="#2A78D6"/>
+  <rect x="98"  y="116" width="20" height="64" rx="5" fill="#2A78D6"/>
+  <rect x="128" y="132" width="20" height="48" rx="5" fill="#2A78D6"/>
+  <rect x="158" y="92"  width="20" height="88" rx="5" fill="#2A78D6"/>
+  <!-- Línea de tendencia por encima, con corte del color del fondo. -->
+  <path d="M78 122 L108 100 L138 112 L168 74" fill="none" stroke="#ffffff" stroke-width="10"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M78 122 L108 100 L138 112 L168 74" fill="none" stroke="#EB6834" stroke-width="6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="168" cy="74" r="9" fill="#ffffff"/>
+  <circle cx="168" cy="74" r="5.5" fill="#EB6834"/>
+</svg>
