@@ -66,9 +66,11 @@ lo aprovecha con `real_ip_header`, y de paso Cloudflare regala el país en
 ## Publicar una versión nueva
 
 Sube la versión en `umbrel-app.yml` y haz push a `main`: el workflow construye
-y publica `ghcr.io/marionuevo/webstats`. **La primera vez hay que poner el
-paquete en público a mano**, o el Umbrel no puede descargarlo:
-`github.com/users/marionuevo/packages/container/webstats/settings`
+y publica `ghcr.io/marionuevo/webstats` para amd64 y arm64. El paquete hereda la
+visibilidad pública del repo, así que el Umbrel lo descarga sin credenciales.
+
+Luego fija el digest nuevo en `docker-compose.yml` — el workflow lo deja escrito
+en el resumen de la ejecución. La etiqueta puede reapuntar; el digest no.
 
 ## Lo que no cubre
 
