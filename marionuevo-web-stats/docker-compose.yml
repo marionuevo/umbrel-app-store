@@ -12,7 +12,7 @@ services:
   web:
     # Fijada por digest del índice OCI (amd64 + arm64): la etiqueta puede
     # reapuntar, el digest no. Se actualiza al publicar una versión nueva.
-    image: ghcr.io/marionuevo/webstats:1.0.0@sha256:3078d3f5961625803770181df4f77c2dc275fbaa5151d341d1d289682703968b
+    image: ghcr.io/marionuevo/webstats:1.0.1
     restart: unless-stopped
     stop_grace_period: 5s
     volumes:
