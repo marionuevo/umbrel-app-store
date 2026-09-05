@@ -3,7 +3,7 @@ id: marionuevo-web-stats
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-web-stats/icon.svg
 category: networking
 name: Estadísticas Web
-version: "1.0.0"
+version: "1.0.1"
 tagline: Visitas y tráfico de mis webs, casi en tiempo real
 description: >
   Lee el log de nginx de la app Nginx Md y construye estadísticas de visitas y
@@ -32,6 +32,8 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  Primera versión.
+  El tiempo de respuesta por debajo del milisegundo se muestra como "<1 ms"
+  en vez de "0 ms": nginx registra $request_time con tres decimales y parecía
+  que faltaba el dato.
 submitter: Mario
 submission: https://github.com/marionuevo/umbrel-app-store

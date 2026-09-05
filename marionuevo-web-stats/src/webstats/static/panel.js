@@ -23,8 +23,12 @@ function bytes(v) {
 }
 
 function ms(seg) {
-  if (!seg) return "0 ms";
-  return seg < 1 ? Math.round(seg * 1000) + " ms" : NUM1.format(seg) + " s";
+  if (seg >= 1) return NUM1.format(seg) + " s";
+  // nginx da $request_time con tres decimales, así que un fichero estático
+  // servido en menos de un milisegundo se registra como 0,000. Decir "0 ms"
+  // parecería que no hay dato; lo que hay es un techo de resolución.
+  const m = Math.round(seg * 1000);
+  return m < 1 ? "<1 ms" : m + " ms";
 }
 
 function nombrePais(cc) {
@@ -156,8 +160,10 @@ function pintarTarjetas(d) {
     ? bytes(r.bytes / r.peticiones) + " por petición"
     : "";
 
-  $("k-rt").textContent = ms(r.rt);
-  $("k-rt-pie").textContent = "tiempo de servicio de nginx";
+  $("k-rt").textContent = r.peticiones ? ms(r.rt) : "–";
+  $("k-rt-pie").textContent = r.peticiones
+    ? "tiempo de servicio de nginx"
+    : "sin peticiones en el periodo";
 
   const activos = r.activos || 0;
   $("ahora").hidden = false;
