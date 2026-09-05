@@ -1,0 +1,37 @@
+manifestVersion: 1
+id: marionuevo-web-stats
+icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-web-stats/icon.svg
+category: networking
+name: Estadísticas Web
+version: "1.0.0"
+tagline: Visitas y tráfico de mis webs, casi en tiempo real
+description: >
+  Lee el log de nginx de la app Nginx Md y construye estadísticas de visitas y
+  tráfico de los cinco sitios: páginas vistas, visitantes únicos, países,
+  procedencia, navegadores y códigos de respuesta, con un hilo de peticiones en
+  directo.
+
+
+  Separa a las personas de los bots y de los sondeos de vulnerabilidades, que
+  en estas webs son la mayor parte del tráfico. La IP real del visitante se
+  recupera de la cabecera CF-Connecting-IP que pone Cloudflare: sin eso todas
+  las peticiones parecen venir de la pasarela de Docker.
+
+
+  Requiere que Nginx Md tenga la configuración de registro en JSON
+  (00-stats.conf) y su volumen de logs. Los datos no salen de la máquina.
+developer: Mario
+website: https://github.com/marionuevo/umbrel-app-store
+dependencies:
+  - marionuevo-nginx-md
+repo: https://github.com/marionuevo/umbrel-app-store
+support: https://github.com/marionuevo/umbrel-app-store/issues
+port: 9089
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+releaseNotes: >
+  Primera versión.
+submitter: Mario
+submission: https://github.com/marionuevo/umbrel-app-store

@@ -9,3 +9,8 @@ services:
     volumes:
       - /home/umbrel/umbrel/home/websites/config/nginx/conf.d:/etc/nginx/conf.d
       - /home/umbrel/umbrel/home/websites/sites:/var/www/sites:ro
+      # Los logs fuera del contenedor: en la capa de escritura se perdían en
+      # cada recreación, y la app de estadísticas necesita leerlos desde el
+      # anfitrión. 00-stats.conf define el formato JSON que se escribe aquí.
+      - /home/umbrel/umbrel/app-data/marionuevo-nginx-md/logs:/var/log/nginx
+    container_name: marionuevo-nginx-md_web_1

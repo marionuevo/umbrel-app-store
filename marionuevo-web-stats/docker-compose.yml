@@ -1,0 +1,31 @@
+version: "3.7"
+
+services:
+  # El proxy de Umbrel deja el panel detrás del login de la propia máquina.
+  # Aquí se ven IPs de visitantes, así que no conviene servirlo en abierto.
+  app_proxy:
+    environment:
+      APP_HOST: marionuevo-web-stats_web_1
+      APP_PORT: 8080
+    container_name: marionuevo-web-stats_app_proxy_1
+
+  web:
+    image: ghcr.io/marionuevo/webstats:1.0.0
+    restart: unless-stopped
+    stop_grace_period: 5s
+    volumes:
+      # El log que escribe la app de nginx. Va en lectura y escritura porque
+      # el seguidor lo recorta cuando se pasa de tamaño: nginx:alpine no trae
+      # logrotate y desde aquí no se le puede mandar un USR1.
+      - /home/umbrel/umbrel/app-data/marionuevo-nginx-md/logs:/logs
+      # Base de datos propia.
+      - ${APP_DATA_DIR}/data:/data
+    environment:
+      TZ: ${TZ:-Europe/Madrid}
+      WEBSTATS_HOSTS: >-
+        2stops.com,www.2stops.com,bentacu.2stops.com,marionuevo.com,
+        www.marionuevo.com,numediaestudio.com,www.numediaestudio.com,
+        selectosound.com,www.selectosound.com
+      WEBSTATS_RETENTION_DAYS: "180"
+      WEBSTATS_MAX_LOG_MB: "256"
+    container_name: marionuevo-web-stats_web_1
