@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="WSTunnel WireGuard">
+  <rect width="256" height="256" rx="56" fill="#0b1324"/>
+  <!-- túnel -->
+  <g fill="none" stroke="#5eead4" stroke-width="10" stroke-linecap="round">
+    <path d="M40 168 q88 -120 176 0"/>
+    <path d="M72 168 q56 -80 112 0" opacity="0.6"/>
+  </g>
+  <!-- paquete que atraviesa -->
+  <g>
+    <circle cx="128" cy="150" r="20" fill="#f59e0b"/>
+    <path d="M120 150 l6 6 l12 -14" fill="none" stroke="#0b1324" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <!-- onda ws a cada lado -->
+  <g fill="#94a3b8">
+    <circle cx="44" cy="196" r="7"/>
+    <circle cx="128" cy="206" r="7"/>
+    <circle cx="212" cy="196" r="7"/>
+  </g>
+  <text x="128" y="238" text-anchor="middle" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" font-size="26" font-weight="700" fill="#e2e8f0">wss</text>
+</svg>
