@@ -12,6 +12,10 @@ services:
     restart: unless-stopped
     stop_grace_period: 10s
     command:
+      # El entrypoint de la imagen (dumb-init -v --) normalmente ejecuta
+      # /home/app/wstunnel vía un sh -c. Al sobrescribir command hay que dar la
+      # ruta del binario, o dumb-init intenta ejecutar "server" y peta (exit 2).
+      - /home/app/wstunnel
       - server
       - ws://0.0.0.0:8080
       # El cliente solo puede pedir que se le reenvíe a ESTE destino: el

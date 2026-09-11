@@ -3,7 +3,7 @@ id: marionuevo-wstunnel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-wstunnel/icon.svg
 category: networking
 name: WSTunnel WireGuard
-version: "1.0.0"
+version: "1.0.1"
 tagline: Saca el WireGuard de casa por WebSocket cuando la red capa el UDP
 description: >
   Servidor wstunnel que envuelve el WireGuard del UDM-Pro dentro de un
@@ -33,8 +33,8 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  Primera versión. wstunnel 10.7.1, fijado por digest. Requiere un Public
-  Hostname en el Cloudflare Tunnel apuntando a http://10.80.20.22:56821 y un
-  peer dedicado en el WireGuard del UDM-Pro. Ver el README.
+  Arreglo de arranque: el entrypoint de la imagen (dumb-init) necesita la ruta
+  del binario /home/app/wstunnel en el command; sin ella el contenedor entraba
+  en bucle de reinicio (exit 2).
 submitter: Mario
 submission: https://github.com/marionuevo/umbrel-app-store
