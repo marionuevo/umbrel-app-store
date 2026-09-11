@@ -1,0 +1,40 @@
+manifestVersion: 1
+id: marionuevo-wstunnel
+icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-wstunnel/icon.svg
+category: networking
+name: WSTunnel WireGuard
+version: "1.0.0"
+tagline: Saca el WireGuard de casa por WebSocket cuando la red capa el UDP
+description: >
+  Servidor wstunnel que envuelve el WireGuard del UDM-Pro dentro de un
+  WebSocket, para poder conectar desde redes que bloquean todo el UDP y solo
+  dejan salir HTTP/HTTPS a través de un proxy (el caso de la WiFi "na" de la
+  empresa, que además hace MITM de TLS).
+
+
+  El contenedor escucha un WebSocket en texto plano en el 8080 y solo acepta
+  reenviar al WireGuard del UDM-Pro en 172.16.10.10:51820 (--restrict-to). El
+  wss:// público y su TLS los pone Cloudflare Tunnel (la app cloudflared ya
+  instalada): un Public Hostname apunta a http://10.80.20.22:56821. El path del
+  upgrade actúa de secreto compartido con el cliente.
+
+
+  No tiene interfaz web. El tráfico que viaja dentro sigue cifrado por
+  WireGuard de extremo a extremo; wstunnel solo le da forma de WebSocket para
+  atravesar el proxy.
+developer: Mario
+website: https://github.com/marionuevo/umbrel-app-store
+dependencies: []
+repo: https://github.com/marionuevo/umbrel-app-store
+support: https://github.com/marionuevo/umbrel-app-store/issues
+port: 56821
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+releaseNotes: >
+  Primera versión. wstunnel 10.7.1, fijado por digest. Requiere un Public
+  Hostname en el Cloudflare Tunnel apuntando a http://10.80.20.22:56821 y un
+  peer dedicado en el WireGuard del UDM-Pro. Ver el README.
+submitter: Mario
+submission: https://github.com/marionuevo/umbrel-app-store

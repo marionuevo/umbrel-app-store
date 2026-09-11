@@ -1,0 +1,33 @@
+version: "3.7"
+
+services:
+  # Headless: no hay UI web, así que no se declara app_proxy. El contenedor
+  # expone un WebSocket en texto plano (ws://) en el puerto 8080; el TLS lo
+  # pone Cloudflare Tunnel por delante (ver README). Publicamos 56821 en el
+  # host para que el connector de cloudflared lo alcance en 10.80.20.22:56821.
+  server:
+    # wstunnel 10.7.1. Fijado por digest del índice OCI: la etiqueta puede
+    # reapuntar, el digest no.
+    image: ghcr.io/erebe/wstunnel@sha256:4bab245f0c77be62fd80213e1c785410b7e4b8c50f18fbe219499e6e89ec4952
+    restart: unless-stopped
+    stop_grace_period: 10s
+    command:
+      - server
+      - ws://0.0.0.0:8080
+      # El cliente solo puede pedir que se le reenvíe a ESTE destino: el
+      # WireGuard del UDM-Pro en su WAN2. Nada más sale de aquí.
+      - --restrict-to
+      - 172.16.10.10:51820
+      # El path de upgrade actúa de secreto: el cliente debe usar el mismo
+      # con -P. Sin él, conexión rechazada. Usamos la contraseña que genera
+      # Umbrel por app (determinista, nunca en el repo). Se lee tras instalar
+      # con:  docker inspect marionuevo-wstunnel_server_1 (o ver el README).
+      - --restrict-http-upgrade-path-prefix
+      - ${APP_PASSWORD}
+      # Mantener vivas las conexiones ociosas (WireGuard ya manda keepalive
+      # cada 25 s, pero esto cubre el tramo cliente<->servidor).
+      - --websocket-ping-frequency
+      - 30s
+    ports:
+      - "56821:8080"
+    container_name: marionuevo-wstunnel_server_1
