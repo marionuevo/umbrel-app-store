@@ -9,7 +9,7 @@ services:
     # wstunnel 10.7.1. Fijado por digest del índice OCI: la etiqueta puede
     # reapuntar, el digest no.
     image: ghcr.io/erebe/wstunnel@sha256:4bab245f0c77be62fd80213e1c785410b7e4b8c50f18fbe219499e6e89ec4952
-    restart: unless-stopped
+    restart: on-failure
     stop_grace_period: 10s
     command:
       # El entrypoint de la imagen (dumb-init -v --) normalmente ejecuta
@@ -34,4 +34,3 @@ services:
       - 30s
     ports:
       - "56821:8080"
-    container_name: marionuevo-wstunnel_server_1

@@ -3,7 +3,7 @@ id: marionuevo-web-stats
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-web-stats/icon.svg
 category: networking
 name: Estadísticas Web
-version: "1.0.1"
+version: "1.1.0"
 tagline: Visitas y tráfico de mis webs, casi en tiempo real
 description: >
   Lee el log de nginx de la app Nginx Md y construye estadísticas de visitas y
@@ -20,6 +20,8 @@ description: >
 
   Requiere que Nginx Md tenga la configuración de registro en JSON
   (00-stats.conf) y su volumen de logs. Los datos no salen de la máquina.
+  En umbrelOS 2.0 hay que seleccionar la misma carpeta de logs compartidos que
+  usa Nginx Md.
 developer: Mario
 website: https://github.com/marionuevo/umbrel-app-store
 dependencies:
@@ -31,9 +33,36 @@ gallery: []
 path: ""
 defaultUsername: ""
 defaultPassword: ""
+storage:
+  dataRoot: data
+folderAccess:
+  - id: website-logs
+    name: Logs web compartidos
+    note: Selecciona la misma carpeta de logs elegida en Nginx Md. Debe permitir escritura porque esta app recorta stats.log.
+    mounts:
+      - service: web
+        targetPath: /logs
+        readOnly: false
+environment:
+  - name: TZ
+    services: [web]
+    default: Europe/Madrid
+    note: Zona horaria IANA para las estadísticas.
+  - name: WEBSTATS_HOSTS
+    services: [web]
+    default: 2stops.com,www.2stops.com,bentacu.2stops.com,marionuevo.com,www.marionuevo.com,numediaestudio.com,www.numediaestudio.com,selectosound.com,www.selectosound.com
+    note: Lista separada por comas de hosts incluidos en las estadísticas.
+  - name: WEBSTATS_RETENTION_DAYS
+    services: [web]
+    default: "180"
+    note: Días de retención de datos agregados.
+  - name: WEBSTATS_MAX_LOG_MB
+    services: [web]
+    default: "256"
+    note: Tamaño máximo de stats.log antes de que el seguidor lo recorte.
 releaseNotes: >
-  El tiempo de respuesta por debajo del milisegundo se muestra como "<1 ms"
-  en vez de "0 ms": nginx registra $request_time con tres decimales y parecía
-  que faltaba el dato.
+  Preparación para umbrelOS 2.0: la base de datos puede usar el almacenamiento
+  gestionado, los ajustes se editan desde la app y los logs se eligen como una
+  carpeta compartida con Nginx Md.
 submitter: Mario
 submission: https://github.com/marionuevo/umbrel-app-store

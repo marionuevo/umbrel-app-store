@@ -7,21 +7,18 @@ services:
     environment:
       APP_HOST: marionuevo-web-stats_web_1
       APP_PORT: 8080
-    container_name: marionuevo-web-stats_app_proxy_1
 
   web:
     # Fijada por digest del índice OCI (amd64 + arm64): la etiqueta puede
     # reapuntar, el digest no. Se actualiza al publicar una versión nueva.
     image: ghcr.io/marionuevo/webstats:1.0.1@sha256:92d4fc8855862f9d6dd54a6755b3eaf7b50d644f397773d763d0eb9fa2b4f134
-    restart: unless-stopped
+    restart: on-failure
     stop_grace_period: 5s
     volumes:
-      # El log que escribe la app de nginx. Va en lectura y escritura porque
-      # el seguidor lo recorta cuando se pasa de tamaño: nginx:alpine no trae
-      # logrotate y desde aquí no se le puede mandar un USR1.
-      - /home/umbrel/umbrel/app-data/marionuevo-nginx-md/logs:/logs
       # Base de datos propia.
       - ${APP_DATA_DIR}/data:/data
+      # umbrelOS 2.0 inyecta /logs desde folderAccess. Debe ser la misma
+      # carpeta seleccionada por Nginx Md, con escritura para recortar stats.log.
     environment:
       TZ: ${TZ:-Europe/Madrid}
       WEBSTATS_HOSTS: >-
@@ -30,4 +27,3 @@ services:
         selectosound.com,www.selectosound.com
       WEBSTATS_RETENTION_DAYS: "180"
       WEBSTATS_MAX_LOG_MB: "256"
-    container_name: marionuevo-web-stats_web_1

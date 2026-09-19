@@ -3,14 +3,9 @@ version: "3.7"
 services:
   web:
     image: nginx:alpine
-    restart: unless-stopped
+    restart: on-failure
     ports:
       - "9088:80"
-    volumes:
-      - /home/umbrel/umbrel/home/websites/config/nginx/conf.d:/etc/nginx/conf.d
-      - /home/umbrel/umbrel/home/websites/sites:/var/www/sites:ro
-      # Los logs fuera del contenedor: en la capa de escritura se perdían en
-      # cada recreación, y la app de estadísticas necesita leerlos desde el
-      # anfitrión. 00-stats.conf define el formato JSON que se escribe aquí.
-      - /home/umbrel/umbrel/app-data/marionuevo-nginx-md/logs:/var/log/nginx
-    container_name: marionuevo-nginx-md_web_1
+    # umbrelOS 2.0 inyecta estos tres montajes a partir de folderAccess en el
+    # manifiesto. No fijar rutas del anfitrión aquí: el usuario elige las
+    # carpetas de configuración, sitios y logs desde Ajustes de la app.
