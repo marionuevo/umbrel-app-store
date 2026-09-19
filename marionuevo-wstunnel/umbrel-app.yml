@@ -3,7 +3,7 @@ id: marionuevo-wstunnel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-wstunnel/icon.svg
 category: networking
 name: WSTunnel WireGuard
-version: "1.0.1"
+version: "1.0.2"
 tagline: Saca el WireGuard de casa por WebSocket cuando la red capa el UDP
 description: >
   Servidor wstunnel que envuelve el WireGuard del UDM-Pro dentro de un

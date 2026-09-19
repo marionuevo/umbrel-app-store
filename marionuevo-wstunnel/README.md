@@ -39,7 +39,7 @@ cliente:
 
 ```sh
 ssh umbrel@10.80.20.22 \
-  'docker inspect marionuevo-wstunnel_server_1 \
+  'docker inspect $(docker ps -q --filter name=marionuevo-wstunnel_server) \
      --format "{{range .Args}}{{println .}}{{end}}" | tail -4'
 # la línea tras "--restrict-http-upgrade-path-prefix" es el secreto (-P del cliente)
 ```

@@ -3,17 +3,41 @@ id: marionuevo-nginx-md
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-nginx-md/icon.svg
 category: networking
 name: Nginx Md
-version: "1.1.0"
+version: "1.2.0"
 tagline: Servidor nginx para mis sitios estáticos
 description: >
-  Sirve las webs y configuración desde mi carpeta de websites.
+  Sirve sitios estáticos y su configuración nginx desde carpetas elegidas en
+  Umbrel. La aplicación necesita seleccionar las carpetas de configuración,
+  sitios y logs antes de arrancar.
 developer: Mario
 dependencies: []
 repo: https://github.com/marionuevo/umbrel-app-store
 support: https://github.com/marionuevo/umbrel-app-store
 port: 9088
 gallery: []
+folderAccess:
+  - id: website-config
+    name: Configuración nginx
+    note: Selecciona la carpeta que contiene los virtual hosts y 00-stats.conf.
+    mounts:
+      - service: web
+        targetPath: /etc/nginx/conf.d
+        readOnly: true
+  - id: website-sites
+    name: Sitios estáticos
+    note: Selecciona la carpeta raíz que contiene un directorio por sitio.
+    mounts:
+      - service: web
+        targetPath: /var/www/sites
+        readOnly: true
+  - id: website-logs
+    name: Logs web compartidos
+    note: Selecciona la carpeta compartida donde nginx escribe stats.log.
+    mounts:
+      - service: web
+        targetPath: /var/log/nginx
+        readOnly: false
 releaseNotes: >
-  Los logs pasan a un volumen del anfitrión y se añade 00-stats.conf, que
-  recupera la IP real del visitante desde CF-Connecting-IP y escribe una línea
-  JSON por petición para la app de Estadísticas Web.
+  Preparación para umbrelOS 2.0: las carpetas de configuración, sitios y logs
+  se seleccionan desde Ajustes de la app. Selecciona la misma carpeta de logs
+  también en Estadísticas Web antes de actualizar.
