@@ -1,8 +1,8 @@
 # Preparación de migración a umbrelOS 2.0
 
-Esta rama prepara los paquetes; no es una autorización para cambiar el Umbrel
-en producción. No hay un dispositivo beta/staging disponible, así que no se
-debe instalar esta rama ni mover datos antes de verificar la versión estable.
+La rama se publicó en `main` y la migración de producción se ejecutó el
+2026-09-22 sobre umbrelOS 2.0.0 mediante Umbrel MCP. La copia original de los
+logs se conserva para rollback.
 
 ## Qué cambia
 
@@ -15,25 +15,22 @@ debe instalar esta rama ni mover datos antes de verificar la versión estable.
 - WSTunnel no tiene datos que migrar; solo adopta la política de reinicio y la
   lectura del secreto ya no depende de un nombre de contenedor fijado.
 
-## Cutover después de la versión estable
+## Resultado del cutover
 
-1. Revisa la versión exacta de umbrelOS 2.0 y conserva copias de los manifiestos
-   y compose actuales.
-2. Haz una copia verificable de `sites/`, `config/nginx/conf.d/`, el directorio
-   de logs y `webstats.db`; mantén la configuración anterior para volver atrás.
-3. Instala/actualiza Nginx Md y selecciona las carpetas de configuración y
-   sitios existentes, más una nueva carpeta compartida para logs. Copia los logs
-   solo si se desea conservarlos; crea `stats.log` de forma controlada.
-4. Instala/actualiza Estadísticas Web, selecciona exactamente la misma carpeta
-   compartida de logs y verifica que puede leer, escribir y recortar `stats.log`.
-5. Comprueba nginx, una visita registrada, la persistencia de SQLite tras
-   reiniciar y la página de estadísticas.
-6. Solo entonces cambia el despliegue de webs. Descubre por SSH la ruta real de
-   la carpeta seleccionada en `/Home/...` y ejecútalo primero en seco:
-   `REMOTE_ROOT=/ruta/real ./deploy.sh --check <sitio>`.
-7. Si falla cualquier comprobación, restaura los manifiestos, compose y rutas
-   anteriores antes de volver a desplegar.
+1. Nginx Md `1.2.0` is ready with configuration, sites, and logs mounted from
+   `/Home/websites` folder selections.
+2. Web Stats `1.1.0` is ready with `/Home/websites/logs` mounted at `/logs` and
+   `storage.dataRoot: data` enabled.
+3. WSTunnel `1.0.2` is ready and remains stateless.
+4. The old logs were copied to `/Home/websites/logs`; the original app-managed
+   directory remains intact.
+5. HTTP serving returned `200`; Web Stats health reached the authenticated
+   proxy; all three app operations completed without failure.
+6. No external storage move or destructive cleanup has been performed.
 
-La selección `/Home/...` de Umbrel es una ruta virtual de la UI. Esta rama no
-asume cuál es su ruta de sistema accesible mediante SSH; debe observarse en la
-versión estable antes de sustituir el destino de `deploy.sh`.
+Before normal website changes, run `./deploy-config.sh --check` and then
+`./deploy.sh --check <sitio>`.
+
+La selección `/Home/...` de Umbrel es una ruta virtual de la UI. En esta
+migración `/Home/websites` fue verificado como
+`/home/umbrel/umbrel/home/websites` para las herramientas SSH.
