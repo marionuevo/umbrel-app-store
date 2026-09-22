@@ -46,6 +46,15 @@ ssh umbrel@10.80.20.22 \
 
 El cliente debe usar ese valor EXACTO en `-P`.
 
+### TODO: quitar el secreto duplicado del cliente
+
+`vpn-diag/cliente-na/na-tunnel.sh` mantiene actualmente una copia de
+`APP_PASSWORD` en `SECRET_PATH`. El servidor ya obtiene el valor desde Umbrel,
+pero el cliente sigue necesitando una fuente local. Sustituir esa constante por
+macOS Keychain o una variable/archivo local fuera de Git y documentar el
+procedimiento de rotación. No poner el secreto como `default` en
+`umbrel-app.yml`, porque el manifiesto es público.
+
 ### 2. Public Hostname en el Cloudflare Tunnel
 
 Dashboard de **Cloudflare Zero Trust → Networks → Tunnels → (tu túnel) →
