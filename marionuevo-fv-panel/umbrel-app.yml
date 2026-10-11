@@ -1,0 +1,29 @@
+manifestVersion: 1
+id: marionuevo-fv-panel
+icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fv-panel/icon.svg
+category: automation
+name: Fotovoltaica
+version: "1.0.0"
+tagline: La producción de las placas y el consumo de casa, en directo
+description: >
+  Panel de supervisión de la instalación fotovoltaica conectado al websocket de
+  Home Assistant: flujos de energía entre placas, casa y red, producción frente
+  al límite del inversor, autonomía y autoconsumo, curva del día con excedente
+  y compra, recorrido del sol y balance del día en kWh y euros.
+
+
+  Pensado para dejarlo fijo en un iPad. El token de Home Assistant se guarda en
+  data/config.local.js dentro de la app y solo se sirve tras iniciar sesión en
+  Umbrel; si no existe, el panel lo pide la primera vez.
+developer: Mario
+website: https://github.com/marionuevo/umbrel-app-store
+dependencies: []
+repo: https://github.com/marionuevo/umbrel-app-store
+support: https://github.com/marionuevo/umbrel-app-store/issues
+port: 9090
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+releaseNotes: >
+  Primera versión.

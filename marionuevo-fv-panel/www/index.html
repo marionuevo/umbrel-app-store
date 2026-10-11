@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fotovoltaica en vivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Varela+Round&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Panel de instrumentos: rejilla de 12 columnas; el diagrama de flujos manda arriba a la
+   izquierda, las cifras grandes a su derecha, la curva del día a todo lo ancho y abajo los
+   instrumentos de detalle. Oscuro primero (pantalla fija), con variante clara. */
+:root {
+  --bg: #0e1a2b;          /* noche */
+  --panel: #12213a;
+  --fg: #f7f0e4;          /* cal */
+  --muted: #8f9cad;
+  --line: #22344d;
+  --sun: #f0a93b;         /* producción */
+  --sun-dim: rgba(240, 169, 59, .26);
+  --home: #f7f0e4;        /* consumo */
+  --grid-out: #88a592;    /* salvia: vertido */
+  --grid-in: #e0785e;     /* importación */
+  --steel: #5b87b9;       /* acero: TrueNAS, ventana de copia */
+  --steel-dim: rgba(91, 135, 185, .16);
+  --out-band: rgba(136, 165, 146, .30);  /* excedente */
+  --in-band: rgba(224, 120, 94, .30);    /* compra */
+  --font-display: "Varela Round", "Nunito", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f7f0e4; --panel: #fffaf1; --fg: #0e1a2b; --muted: #5d6877; --line: #e2d8c6;
+    --sun: #c07b10; --sun-dim: rgba(192, 123, 16, .16); --home: #0e1a2b;
+    --grid-out: #4f6958; --grid-in: #b24a33; --steel: #406896; --steel-dim: rgba(64, 104, 150, .2);
+    --out-band: rgba(79, 105, 88, .30); --in-band: rgba(178, 74, 51, .26);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f7f0e4; --panel: #fffaf1; --fg: #0e1a2b; --muted: #5d6877; --line: #e2d8c6;
+  --sun: #c07b10; --sun-dim: rgba(192, 123, 16, .16); --home: #0e1a2b;
+  --grid-out: #4f6958; --grid-in: #b24a33; --steel: #406896; --steel-dim: rgba(64, 104, 150, .2);
+  --out-band: rgba(79, 105, 88, .30); --in-band: rgba(178, 74, 51, .26);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-display); font-size: 15px; line-height: 1.45;
+  font-synthesis: none; -webkit-font-smoothing: antialiased;
+  padding-inline: max(16px, env(safe-area-inset-left)); padding-block: max(16px, env(safe-area-inset-top)) 24px;
+}
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.label { font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-family: var(--font-num); }
+.app { max-width: 1440px; margin: 0 auto; display: grid; gap: 16px; }
+
+/* barra superior */
+.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px; padding-bottom: 4px; }
+.top h1 { font-weight: 400; font-size: 1.6rem; margin: 0; letter-spacing: .01em; }
+.top .meta { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--muted); font-size: .85rem; margin-left: auto; align-items: center; }
+.live { display: inline-flex; align-items: center; gap: 8px; }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.live.on i { background: var(--grid-out); box-shadow: 0 0 0 0 var(--grid-out); animation: pulse 2s infinite; }
+.live.off i { background: var(--grid-in); }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--grid-out) 60%, transparent); } 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+button.link { background: none; border: 0; color: var(--muted); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+button.link:hover, button.link:focus-visible { color: var(--fg); }
+
+/* rejilla */
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; min-width: 0; display: grid; gap: 12px; align-content: start; }
+.card h2 { font-weight: 400; font-size: 1rem; margin: 0; display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.flow { grid-column: span 7; }
+.figures { grid-column: span 5; }
+.day { grid-column: span 12; }
+.sunc { grid-column: span 4; }
+.inv { grid-column: span 4; }
+.tally { grid-column: span 4; }
+@media (max-width: 1100px) { .flow, .figures { grid-column: span 12; } .sunc, .inv, .tally { grid-column: span 6; } .tally { grid-column: span 12; } }
+@media (max-width: 720px) { .sunc, .inv, .tally { grid-column: span 12; } }
+
+/* flujos */
+.flow svg { width: 100%; height: auto; display: block; }
+.node-ring { fill: var(--panel); stroke-width: 2; }
+.node-val { font-family: var(--font-num); font-size: 26px; fill: var(--fg); }
+.node-unit { font-family: var(--font-num); font-size: 13px; fill: var(--muted); }
+.node-name { font-family: var(--font-display); font-size: 14px; fill: var(--muted); letter-spacing: .04em; }
+.wire { fill: none; stroke: var(--line); stroke-width: 3; stroke-linecap: round; }
+.pulse { fill: none; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 2 18; opacity: 0; transition: opacity .6s; }
+.pulse.active { opacity: 1; animation: flow linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -200; } }
+.wire-label { font-family: var(--font-num); font-size: 12px; fill: var(--muted); }
+.nas-badge { font-family: var(--font-num); font-size: 11.5px; fill: var(--steel); }
+
+/* cifras */
+.figures { grid-template-columns: 1fr 1fr; gap: 18px 20px; align-content: space-between; }
+.figures .hero { grid-column: span 2; display: grid; gap: 6px; }
+.big { font-family: var(--font-num); font-size: clamp(3rem, 7vw, 5.2rem); line-height: .95; letter-spacing: -.02em; color: var(--sun); }
+.big small { font-size: .35em; color: var(--muted); letter-spacing: 0; margin-left: .2em; }
+.meter { position: relative; height: 10px; border-radius: 6px; background: var(--sun-dim); overflow: hidden; }
+.meter > i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--sun); border-radius: 6px; transition: width .8s ease; }
+.meter-scale { display: flex; justify-content: space-between; font-size: .75rem; color: var(--muted); }
+.clip { color: var(--sun); font-size: .85rem; min-height: 1.2em; }
+.stat { display: grid; gap: 2px; }
+.stat .v { font-family: var(--font-num); font-size: 1.9rem; line-height: 1.1; }
+.stat .s { font-size: .82rem; color: var(--muted); }
+.ring { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; }
+.ring svg { width: 64px; height: 64px; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 7; }
+.ring .bg { stroke: var(--line); }
+.ring .fg { stroke-linecap: round; transition: stroke-dashoffset .8s ease; }
+
+/* curva del día */
+.day svg { width: 100%; height: auto; display: block; }
+.chart-wrap { overflow-x: auto; }
+.chart-wrap svg { min-width: 640px; }
+.ax { font-family: var(--font-num); font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+.gl { stroke: var(--line); stroke-width: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .8rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* sol */
+.sunc svg { width: 100%; height: auto; display: block; }
+.kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.kv div { display: grid; gap: 2px; }
+.kv .v { font-family: var(--font-num); font-size: 1.15rem; }
+
+/* inversor */
+.inv .rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.inv .rows div { display: grid; gap: 1px; border-top: 1px solid var(--line); padding-top: 8px; }
+.inv .rows .v { font-family: var(--font-num); font-size: 1.25rem; }
+.status { display: inline-flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted); }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.status.ok i { background: var(--grid-out); }
+.status.warn i { background: var(--grid-in); }
+
+/* balance */
+.tally .bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--line); }
+.tally .bar i { display: block; height: 100%; transition: width .8s ease; }
+.tally .rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.tally .rows div { display: grid; gap: 1px; }
+.tally .rows .v { font-family: var(--font-num); font-size: 1.25rem; }
+.save { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.save .v { font-family: var(--font-num); font-size: 1.8rem; color: var(--grid-out); }
+
+/* configuración */
+dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 14px; padding: 24px; width: min(440px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(5, 10, 18, .6); }
+dialog form { display: grid; gap: 14px; }
+dialog h2 { margin: 0; font-weight: 400; }
+dialog p { margin: 0; color: var(--muted); font-size: .88rem; }
+dialog label { display: grid; gap: 6px; font-size: .85rem; color: var(--muted); }
+dialog input { font: inherit; font-family: var(--font-num); font-size: .85rem; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); width: 100%; }
+dialog input:focus-visible, .btn:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
+.btn { font: inherit; border: 0; border-radius: 8px; padding: 10px 16px; background: var(--sun); color: #1a1205; cursor: pointer; justify-self: start; }
+.err { color: var(--grid-in); font-size: .85rem; min-height: 1.2em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse.active { animation: none; stroke-dasharray: none; opacity: .9; }
+  .live.on i { animation: none; }
+  .meter > i, .ring .fg, .tally .bar i { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Fotovoltaica en vivo</h1>
+    <div class="meta">
+      <span class="live" id="live"><i></i><span id="live-text">Conectando con Home Assistant…</span></span>
+      <span class="num" id="clock">--:--</span>
+      <button class="link" id="theme" type="button">Oscuro</button>
+      <button class="link" id="open-config" type="button">Conexión</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- Diagrama de flujos -->
+    <section class="card flow" aria-labelledby="h-flow">
+      <h2 id="h-flow"><span>Ahora mismo</span><span class="label" id="flow-note">placas → casa → red</span></h2>
+      <svg viewBox="0 0 640 380" role="img" aria-label="Flujo de energía entre las placas, la casa y la red">
+        <path id="w-pv-home" class="wire" d="M150 110 C 300 110, 340 190, 470 190"/>
+        <path id="w-pv-grid" class="wire" d="M150 110 C 170 230, 230 300, 300 312"/>
+        <path id="w-grid-home" class="wire" d="M340 312 C 420 300, 470 260, 470 230"/>
+        <path id="p-pv-home" class="pulse" d="M150 110 C 300 110, 340 190, 470 190" style="stroke: var(--sun)"/>
+        <path id="p-pv-grid" class="pulse" d="M150 110 C 170 230, 230 300, 300 312" style="stroke: var(--grid-out)"/>
+        <path id="p-grid-home" class="pulse" d="M340 312 C 420 300, 470 260, 470 230" style="stroke: var(--grid-in)"/>
+        <text class="wire-label" id="l-pv-home" x="300" y="128" text-anchor="middle"></text>
+        <text class="wire-label" id="l-pv-grid" x="168" y="260" text-anchor="end"></text>
+        <text class="wire-label" id="l-grid-home" x="452" y="292" text-anchor="start"></text>
+
+        <!-- placas -->
+        <g transform="translate(110 110)">
+          <circle class="node-ring" r="62" style="stroke: var(--sun)"/>
+          <g transform="translate(-17 -44)" fill="none" stroke="var(--sun)" stroke-width="1.6" stroke-linejoin="round">
+            <path d="M3 0 H31 L34 16 H0 Z"/><path d="M17 0 V16 M1.5 8 H32.5"/>
+          </g>
+          <text class="node-val" id="v-pv" y="10" text-anchor="middle">–</text>
+          <text class="node-unit" y="30" text-anchor="middle">W</text>
+          <text class="node-name" y="88" text-anchor="middle">Placas</text>
+        </g>
+        <!-- casa -->
+        <g transform="translate(510 190)">
+          <circle class="node-ring" r="62" style="stroke: var(--home)"/>
+          <g transform="translate(-14 -46)" fill="none" stroke="var(--home)" stroke-width="1.6" stroke-linejoin="round">
+            <path d="M0 12 L14 0 L28 12 V24 H0 Z"/><path d="M11 24 V16 H17 V24"/>
+          </g>
+          <text class="node-val" id="v-load" y="10" text-anchor="middle">–</text>
+          <text class="node-unit" y="30" text-anchor="middle">W</text>
+          <text class="node-name" y="88" text-anchor="middle">Casa</text>
+          <text class="nas-badge" id="nas-badge" y="108" text-anchor="middle"></text>
+        </g>
+        <!-- red -->
+        <g transform="translate(320 312)">
+          <circle class="node-ring" r="46" id="ring-grid" style="stroke: var(--muted)"/>
+          <g transform="translate(-9 -34)" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-linejoin="round" id="ico-grid">
+            <path d="M9 0 L2 18 H16 Z"/><path d="M4 8 H14 M0 18 H18"/>
+          </g>
+          <text class="node-val" id="v-grid" y="8" text-anchor="middle" style="font-size:20px">–</text>
+          <text class="node-unit" id="u-grid" y="25" text-anchor="middle">W</text>
+          <text class="node-name" id="n-grid" y="66" text-anchor="middle">Red</text>
+        </g>
+      </svg>
+    </section>
+
+    <!-- Cifras -->
+    <section class="card figures" aria-label="Cifras principales">
+      <div class="hero">
+        <span class="label">Producción</span>
+        <div class="big" id="big-pv">–<small>W</small></div>
+        <div class="meter" aria-hidden="true"><i id="meter-pv"></i></div>
+        <div class="meter-scale num"><span>0</span><span>inversor 3.000 W</span></div>
+        <div class="clip" id="clip"></div>
+      </div>
+      <div class="ring">
+        <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="bg" cx="32" cy="32" r="26"/><circle class="fg" id="ring-aut" cx="32" cy="32" r="26" stroke="var(--grid-out)" stroke-dasharray="163.4" stroke-dashoffset="163.4"/></svg>
+        <div class="stat"><span class="label">Autonomía</span><span class="v" id="aut">–</span><span class="s">de la casa sale del sol</span></div>
+      </div>
+      <div class="ring">
+        <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="bg" cx="32" cy="32" r="26"/><circle class="fg" id="ring-self" cx="32" cy="32" r="26" stroke="var(--sun)" stroke-dasharray="163.4" stroke-dashoffset="163.4"/></svg>
+        <div class="stat"><span class="label">Autoconsumo</span><span class="v" id="self">–</span><span class="s">del sol se usa en casa</span></div>
+      </div>
+      <div class="stat"><span class="label" id="grid-label">Red</span><span class="v" id="grid-big">–</span><span class="s" id="grid-sub"></span></div>
+      <div class="stat"><span class="label">Hoy generado</span><span class="v" id="eday">–</span><span class="s" id="eday-sub"></span></div>
+    </section>
+
+    <!-- Curva del día -->
+    <section class="card day" aria-labelledby="h-day">
+      <h2 id="h-day"><span>Hoy</span><span class="label" id="day-note"></span></h2>
+      <div class="chart-wrap"><svg id="chart" viewBox="0 0 1200 300" role="img" aria-label="Producción y consumo de hoy"></svg></div>
+      <div class="legend">
+        <span><i class="sw" style="background:transparent;border-top:2px solid var(--sun)"></i>Producción</span>
+        <span><i class="sw" style="background:var(--sun-dim)"></i>Sol usado en casa</span>
+        <span><i class="sw" style="background:transparent;border-top:2px solid var(--home)"></i>Consumo de la casa</span>
+        <span><i class="sw" style="background:var(--out-band)"></i>Excedente vertido</span>
+        <span><i class="sw" style="background:var(--in-band)"></i>Comprado a la red</span>
+        <span><i class="sw" style="background:var(--steel-dim);outline:1px solid var(--steel);outline-offset:-1px"></i>Ventana de la copia del TrueNAS</span>
+      </div>
+    </section>
+
+    <!-- Sol -->
+    <section class="card sunc" aria-labelledby="h-sun">
+      <h2 id="h-sun"><span>El sol</span><span class="label">placas al oeste · 270°</span></h2>
+      <svg id="sunarc" viewBox="0 0 360 170" role="img" aria-label="Recorrido del sol hoy"></svg>
+      <div class="kv">
+        <div><span class="label">Altura</span><span class="v" id="sun-el">–</span></div>
+        <div><span class="label">Acimut</span><span class="v" id="sun-az">–</span></div>
+        <div><span class="label">Luz</span><span class="v" id="sun-len">–</span></div>
+      </div>
+    </section>
+
+    <!-- Inversor -->
+    <section class="card inv" aria-labelledby="h-inv">
+      <h2 id="h-inv"><span>Inversor Fronius Primo 3.0</span><span class="status" id="inv-status"><i></i><span>–</span></span></h2>
+      <div class="rows">
+        <div><span class="label">Tensión DC</span><span class="v" id="dcv">–</span></div>
+        <div><span class="label">Corriente DC</span><span class="v" id="dca">–</span></div>
+        <div><span class="label">Tensión AC</span><span class="v" id="acv">–</span></div>
+        <div><span class="label">Corriente AC</span><span class="v" id="aca">–</span></div>
+        <div><span class="label">Frecuencia</span><span class="v" id="freq">–</span></div>
+        <div><span class="label">Factor de potencia</span><span class="v" id="pf">–</span></div>
+      </div>
+    </section>
+
+    <!-- Balance -->
+    <section class="card tally" aria-labelledby="h-tally">
+      <h2 id="h-tally"><span>Balance de hoy</span><span class="label" id="tally-note"></span></h2>
+      <div class="bar" aria-hidden="true"><i id="b-self" style="background:var(--sun)"></i><i id="b-exp" style="background:var(--grid-out)"></i><i id="b-imp" style="background:var(--grid-in)"></i></div>
+      <div class="rows">
+        <div><span class="label">Autoconsumido</span><span class="v" id="t-self">–</span></div>
+        <div><span class="label">Vertido</span><span class="v" id="t-exp">–</span></div>
+        <div><span class="label">Comprado</span><span class="v" id="t-imp">–</span></div>
+        <div><span class="label">Consumo total</span><span class="v" id="t-load">–</span></div>
+      </div>
+      <div class="save"><span class="label">Ahorro de hoy</span><span class="v" id="t-save">–</span></div>
+    </section>
+  </div>
+</div>
+
+<dialog id="config">
+  <form method="dialog" id="config-form">
+    <h2>Conexión con Home Assistant</h2>
+    <p>El token se guarda solo en este navegador. Créalo en tu perfil de Home Assistant, en «Tokens de acceso de larga duración».</p>
+    <label for="cfg-url">Dirección de Home Assistant
+      <input id="cfg-url" name="url" type="url" required placeholder="http://umbrel.local:8123" autocomplete="off">
+    </label>
+    <label for="cfg-token">Token de acceso
+      <input id="cfg-token" name="token" type="password" required autocomplete="off" spellcheck="false">
+    </label>
+    <div class="err" id="cfg-err"></div>
+    <button class="btn" type="submit">Conectar</button>
+  </form>
+</dialog>
+
+<!-- Opcional: config.local.js define window.HA_CONFIG = {token, url?}. Nunca va a git: en el Mac está junto al enlace a este fichero y en Umbrel en data/ de la app. -->
+<script src="config.local.js" onerror="void 0"></script>
+<script>
+"use strict";
+const E = {
+  pv: "sensor.solarnet_power_photovoltaics",
+  load: "sensor.solarnet_power_load_consumed",
+  grid: "sensor.solarnet_power_grid",           // + compra, − vierte
+  aut: "sensor.solarnet_relative_autonomy",
+  self: "sensor.solarnet_relative_self_consumption",
+  eday: "sensor.primo_3_0_1_energy_day",
+  acp: "sensor.primo_3_0_1_ac_power",
+  dcv: "sensor.primo_3_0_1_dc_voltage",
+  dca: "sensor.primo_3_0_1_dc_current",
+  acv: "sensor.primo_3_0_1_ac_voltage",
+  aca: "sensor.primo_3_0_1_ac_current",
+  status: "sensor.primo_3_0_1_status_message",
+  freq: "sensor.smart_meter_63a_1_frequency_phase_average",
+  pf: "sensor.smart_meter_63a_1_power_factor",
+  timp: "sensor.solarnet_grid_import_tariff",
+  texp: "sensor.solarnet_grid_export_tariff",
+  sun: "sun.sun",
+  nas: "switch.z620",
+  copia: "input_boolean.copia_truenas_en_curso",
+  mant: "input_boolean.mantenimiento_truenas_en_curso",
+};
+const IMP = "sensor.smart_meter_63a_1_real_energy_consumed";   // Wh acumulados
+const EXP = "sensor.smart_meter_63a_1_real_energy_produced";
+const INVERTER_W = 3000;
+const STORE = "fv-panel-conexion";
+
+const $ = id => document.getElementById(id);
+const nf0 = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const nf2 = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const eur = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
+const hm = d => d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+
+const states = {};                 // entity_id -> {s, a}
+const series = { pv: [], load: [] };  // [epoch s, W]
+let todayImpWh = null, todayExpWh = null;
+
+const num = id => { const v = parseFloat(states[E[id]]?.s); return Number.isFinite(v) ? v : null; };
+const kwh = wh => wh == null ? "–" : nf1.format(wh / 1000) + " kWh";
+
+/* ---------- configuración ---------- */
+// Servido desde Home Assistant (/local/...): usa la sesión del propio HA, sin token aparte.
+// El frontal de HA guarda en localStorage "hassTokens" {hassUrl, clientId, access_token, refresh_token, expires}.
+function hassSession() {
+  try { const t = JSON.parse(localStorage.getItem("hassTokens") || "null"); if (t?.refresh_token && t?.clientId) return t; } catch (e) {}
+  return null;
+}
+async function hassAccessToken(force = false) {
+  const t = hassSession(); if (!t) return null;
+  if (!force && t.access_token && t.expires > Date.now() + 60000) return t.access_token;
+  const body = new URLSearchParams({ grant_type: "refresh_token", client_id: t.clientId, refresh_token: t.refresh_token });
+  const r = await fetch(location.origin + "/auth/token", { method: "POST", body });
+  if (!r.ok) return null;
+  const n = await r.json();
+  const upd = { ...t, access_token: n.access_token, expires_in: n.expires_in, expires: Date.now() + n.expires_in * 1000 };
+  try { localStorage.setItem("hassTokens", JSON.stringify(upd)); } catch (e) {}
+  return n.access_token;
+}
+// Sin dirección explícita, Home Assistant está en el mismo equipo que sirve el panel (Umbrel).
+const sameHostHA = () => location.protocol.replace("file:", "http:") + "//" + (location.hostname || "localhost") + ":8123";
+function loadConfig() {
+  if (window.HA_CONFIG?.token) return { url: window.HA_CONFIG.url || sameHostHA(), token: window.HA_CONFIG.token };
+  if (hassSession()) return { url: location.origin, hass: true };
+  try { const c = JSON.parse(localStorage.getItem(STORE) || "null"); if (c?.url && c?.token) return c; } catch (e) {}
+  return null;
+}
+function openConfig(msg = "") {
+  const c = loadConfig() || {};
+  $("cfg-url").value = c.url || sameHostHA();
+  $("cfg-token").value = "";
+  $("cfg-err").textContent = msg;
+  if (!$("config").open) $("config").showModal();
+}
+$("open-config").onclick = () => openConfig();
+$("config-form").addEventListener("submit", ev => {
+  const url = $("cfg-url").value.trim().replace(/\/+$/, "");
+  const token = $("cfg-token").value.trim();
+  if (!url || !token) { ev.preventDefault(); return; }
+  try { localStorage.setItem(STORE, JSON.stringify({ url, token })); } catch (e) {}
+  window.HA_CONFIG = { url, token };
+  connect();
+});
+
+/* ---------- websocket de Home Assistant ---------- */
+let ws, msgId = 0, pending = {}, retry = 1000, statsTimer;
+function setLive(kind, text) { $("live").className = "live " + kind; $("live-text").textContent = text; }
+function call(msg) {
+  return new Promise((res, rej) => { const id = ++msgId; pending[id] = { res, rej }; ws.send(JSON.stringify({ id, ...msg })); });
+}
+
+let cfgNow = null;
+function connect() {
+  const cfg = cfgNow = (cfgNow?.hass ? cfgNow : loadConfig());
+  if (!cfg) { setLive("off", "Sin configurar"); openConfig(); return; }
+  try { ws && ws.close(); } catch (e) {}
+  const url = cfg.url.replace(/^http/, "ws") + "/api/websocket";
+  setLive("", "Conectando con Home Assistant…");
+  ws = new WebSocket(url);
+  ws.onmessage = async ev => {
+    const m = JSON.parse(ev.data);
+    if (m.type === "auth_required") {
+      const token = cfg.hass ? await hassAccessToken() : cfg.token;
+      if (!token) { setLive("off", "Sesión de Home Assistant caducada"); retry = 0; openConfig("Vuelve a entrar en Home Assistant en este navegador o pega un token."); ws.close(); return; }
+      ws.send(JSON.stringify({ type: "auth", access_token: token }));
+    }
+    else if (m.type === "auth_invalid") {
+      if (cfg.hass && !cfg.retried) { cfg.retried = true; await hassAccessToken(true); ws.close(); return; }   // renueva y reconecta
+      setLive("off", "Token rechazado"); retry = 0; openConfig("Home Assistant ha rechazado el token. Pega uno nuevo."); ws.close();
+    }
+    else if (m.type === "auth_ok") { retry = 1000; cfg.retried = false; setLive("on", "En directo"); start(); }
+    else if (m.type === "result" && pending[m.id]) { const p = pending[m.id]; delete pending[m.id]; m.success ? p.res(m.result) : p.rej(m.error); }
+    else if (m.type === "event" && m.id === subId) onEntities(m.event);
+  };
+  ws.onclose = () => {
+    clearInterval(statsTimer);
+    if (!retry) return;
+    setLive("off", "Sin conexión · reintentando");
+    setTimeout(connect, retry); retry = Math.min(retry * 2, 30000);
+  };
+}
+
+let subId = null;
+async function start() {
+  subId = msgId + 1;
+  call({ type: "subscribe_entities", entity_ids: Object.values(E) }).catch(() => {});
+  await loadHistory();
+  await loadTodayStats();
+  clearInterval(statsTimer);
+  statsTimer = setInterval(loadTodayStats, 5 * 60 * 1000);
+}
+
+function onEntities(ev) {
+  for (const [id, v] of Object.entries(ev.a || {})) states[id] = { s: v.s, a: v.a || {} };
+  for (const [id, v] of Object.entries(ev.c || {})) {
+    const cur = states[id] || { s: null, a: {} };
+    const plus = v["+"] || {};
+    if ("s" in plus) cur.s = plus.s;
+    if (plus.a) cur.a = { ...cur.a, ...plus.a };
+    states[id] = cur;
+  }
+  for (const id of Object.keys(ev.r || {})) delete states[id];
+  const now = Date.now() / 1000;
+  if (E.pv in (ev.a || {}) || E.pv in (ev.c || {})) pushPoint("pv", now, num("pv"));
+  if (E.load in (ev.a || {}) || E.load in (ev.c || {})) pushPoint("load", now, num("load"));
+  render();
+}
+
+function pushPoint(k, t, v) {
+  if (v == null) return;
+  const arr = series[k];
+  if (arr.length && t - arr[arr.length - 1][0] < 20) arr[arr.length - 1] = [t, v];   // como mucho un punto cada 20 s
+  else arr.push([t, v]);
+}
+
+function midnight() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+
+async function loadHistory() {
+  const r = await call({ type: "history/history_during_period", start_time: midnight().toISOString(),
+    entity_ids: [E.pv, E.load], minimal_response: true, no_attributes: true, significant_changes_only: false });
+  for (const [k, id] of [["pv", E.pv], ["load", E.load]]) {
+    const pts = (r[id] || []).map(p => [p.lu ?? p.lc, parseFloat(p.s)]).filter(p => Number.isFinite(p[1]));
+    // media por minuto para aligerar el dibujo
+    const byMin = new Map();
+    for (const [t, v] of pts) { const m = Math.floor(t / 60); const b = byMin.get(m) || [0, 0]; b[0] += v; b[1]++; byMin.set(m, b); }
+    series[k] = [...byMin].map(([m, [s, n]]) => [m * 60, s / n]);
+  }
+  render();
+}
+
+async function loadTodayStats() {
+  try {
+    const r = await call({ type: "recorder/statistics_during_period", start_time: midnight().toISOString(),
+      statistic_ids: [IMP, EXP], period: "5minute", types: ["change"] });
+    const sum = id => (r[id] || []).reduce((a, p) => a + (p.change || 0), 0);
+    todayImpWh = sum(IMP); todayExpWh = sum(EXP);
+    render();
+  } catch (e) { /* sin estadísticas: el balance queda en guiones */ }
+}
+
+/* ---------- dibujo ---------- */
+function setPulse(id, w, labelId, text) {
+  const p = $(id);
+  const active = w != null && w > 15;
+  p.classList.toggle("active", active);
+  // velocidad proporcional a la potencia: 3 kW ≈ 1,2 s por vuelta del patrón
+  if (active) p.style.animationDuration = Math.max(1.2, Math.min(14, 3600 / w)) + "s";
+  p.style.strokeWidth = active ? (2.5 + Math.min(5, w / 600)) : 4;
+  $(labelId).textContent = active ? text : "";
+}
+
+function render() {
+  const pv = num("pv"), load = num("load"), grid = num("grid");
+  const pvHome = pv != null && load != null ? Math.min(pv, load) : null;
+  const exp = grid != null && grid < 0 ? -grid : 0;
+  const imp = grid != null && grid > 0 ? grid : 0;
+
+  $("v-pv").textContent = pv == null ? "–" : nf0.format(pv);
+  $("v-load").textContent = load == null ? "–" : nf0.format(load);
+  $("v-grid").textContent = grid == null ? "–" : nf0.format(Math.abs(grid));
+  $("n-grid").textContent = grid < -5 ? "Red · vertiendo" : grid > 5 ? "Red · comprando" : "Red";
+  const gc = grid < -5 ? "var(--grid-out)" : grid > 5 ? "var(--grid-in)" : "var(--muted)";
+  $("ring-grid").style.stroke = gc; $("ico-grid").setAttribute("stroke", gc);
+
+  setPulse("p-pv-home", pvHome, "l-pv-home", pvHome != null ? nf0.format(pvHome) + " W" : "");
+  setPulse("p-pv-grid", exp, "l-pv-grid", nf0.format(exp) + " W");
+  setPulse("p-grid-home", imp, "l-grid-home", nf0.format(imp) + " W");
+
+  const nasOn = states[E.nas]?.s === "on";
+  const copia = states[E.copia]?.s === "on", mant = states[E.mant]?.s === "on";
+  $("nas-badge").textContent = mant ? "TrueNAS · mantenimiento" : copia ? "TrueNAS · copia solar" : nasOn ? "TrueNAS encendido" : "";
+
+  $("big-pv").innerHTML = (pv == null ? "–" : nf0.format(pv)) + "<small>W</small>";
+  $("meter-pv").style.width = pv == null ? "0" : Math.min(100, pv / INVERTER_W * 100) + "%";
+  const acp = num("acp");
+  $("clip").textContent = acp != null && acp >= INVERTER_W * 0.97 ? "El inversor está al máximo: recorta lo que sobra de las placas." : "";
+
+  const aut = num("aut"), self = num("self");
+  $("aut").textContent = aut == null ? "–" : nf0.format(aut) + " %";
+  $("self").textContent = self == null ? "–" : nf0.format(self) + " %";
+  $("ring-aut").style.strokeDashoffset = 163.4 * (1 - Math.min(100, aut || 0) / 100);
+  $("ring-self").style.strokeDashoffset = 163.4 * (1 - Math.min(100, self || 0) / 100);
+
+  $("grid-label").textContent = grid < -5 ? "Vertiendo a la red" : grid > 5 ? "Comprando a la red" : "Red";
+  $("grid-big").textContent = grid == null ? "–" : nf0.format(Math.abs(grid)) + " W";
+  $("grid-big").style.color = gc;
+  const timp = num("timp"), texp = num("texp");
+  $("grid-sub").textContent = grid < -5 && texp != null ? `se compensa a ${nf2.format(texp)} €/kWh` : grid > 5 && timp != null ? `a ${nf2.format(timp)} €/kWh` : "equilibrio";
+
+  const eday = num("eday");
+  $("eday").textContent = kwh(eday);
+  $("eday-sub").textContent = eday != null && pv != null ? "producción del inversor" : "";
+
+  renderInverter();
+  renderTally(eday, timp, texp);
+  renderSun();
+  renderChart();
+}
+
+function renderInverter() {
+  const f = (k, unit, fmt = nf1) => { const v = num(k); return v == null ? "–" : fmt.format(v) + " " + unit; };
+  $("dcv").textContent = f("dcv", "V"); $("dca").textContent = f("dca", "A", nf2);
+  $("acv").textContent = f("acv", "V"); $("aca").textContent = f("aca", "A", nf2);
+  $("freq").textContent = f("freq", "Hz", nf2);
+  const pf = num("pf"); $("pf").textContent = pf == null ? "–" : nf2.format(pf);
+  const st = states[E.status]?.s || "–";
+  const words = { running: "Produciendo", startup: "Arrancando", standby: "En espera", sleeping: "Dormido", error: "Error" };
+  const el = $("inv-status");
+  el.className = "status " + (st === "running" ? "ok" : /error|fault/i.test(st) ? "warn" : "");
+  el.lastElementChild.textContent = words[st] || st.replace(/_/g, " ");
+}
+
+function renderTally(edayWh, timp, texp) {
+  if (edayWh == null || todayExpWh == null || todayImpWh == null) return;
+  const selfWh = Math.max(0, edayWh - todayExpWh);
+  const loadWh = selfWh + todayImpWh;
+  $("t-self").textContent = kwh(selfWh); $("t-exp").textContent = kwh(todayExpWh);
+  $("t-imp").textContent = kwh(todayImpWh); $("t-load").textContent = kwh(loadWh);
+  const total = selfWh + todayExpWh + todayImpWh || 1;
+  $("b-self").style.width = selfWh / total * 100 + "%";
+  $("b-exp").style.width = todayExpWh / total * 100 + "%";
+  $("b-imp").style.width = todayImpWh / total * 100 + "%";
+  if (timp != null && texp != null) $("t-save").textContent = eur.format(selfWh / 1000 * timp + todayExpWh / 1000 * texp);
+  $("tally-note").textContent = "desde las 00:00";
+}
+
+/* curva del día: eje de 06:00 a 21:00 */
+const NS = "http://www.w3.org/2000/svg";
+const mk = (tag, attrs, parent) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); parent && parent.appendChild(n); return n; };
+
+function renderChart() {
+  const svg = $("chart"); svg.textContent = "";
+  const W = 1200, H = 300, L = 54, R = 1186, T = 14, B = 266;
+  const d0 = midnight().getTime() / 1000, t0 = d0 + 6 * 3600, t1 = d0 + 21 * 3600;
+  const all = [...series.pv, ...series.load].map(p => p[1]);
+  const ymax = Math.max(3200, Math.ceil(Math.max(0, ...all) / 500) * 500);
+  const x = t => L + (Math.min(Math.max(t, t0), t1) - t0) / (t1 - t0) * (R - L);
+  const y = v => B - v / ymax * (B - T);
+
+  // ventana de la copia del TrueNAS
+  mk("rect", { x: x(d0 + 15.75 * 3600), y: T, width: x(d0 + 16.25 * 3600) - x(d0 + 15.75 * 3600), height: B - T, fill: "var(--steel-dim)" }, svg);
+  for (let v = 0; v <= ymax; v += 1000) {
+    mk("line", { x1: L, x2: R, y1: y(v), y2: y(v), class: "gl" }, svg);
+    mk("text", { x: L - 8, y: y(v) + 4, "text-anchor": "end", class: "ax" }, svg).textContent = v ? nf0.format(v / 1000) + " kW" : "0";
+  }
+  for (let h = 6; h <= 21; h += 1) {
+    const tx = x(d0 + h * 3600);
+    mk("text", { x: tx, y: B + 20, "text-anchor": "middle", class: "ax" }, svg).textContent = h % 3 === 0 ? h + ":00" : "";
+    if (h % 3 === 0) mk("line", { x1: tx, x2: tx, y1: B, y2: B + 5, class: "gl" }, svg);
+  }
+
+  const pv = series.pv.filter(p => p[0] >= t0 && p[0] <= t1);
+  const load = series.load.filter(p => p[0] >= t0 && p[0] <= t1);
+  if (pv.length > 1 && load.length > 1) {
+    // rejilla común de 2 min para excedente / compra
+    const step = 120, tEnd = Math.min(t1, Date.now() / 1000);
+    const at = (arr, t) => { let lo = 0, hi = arr.length - 1; if (t <= arr[0][0]) return arr[0][1]; if (t >= arr[hi][0]) return arr[hi][1];
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; arr[m][0] <= t ? lo = m : hi = m; } return arr[lo][1]; };
+    const ts = []; for (let t = Math.max(t0, pv[0][0]); t <= tEnd; t += step) ts.push(t);
+    const band = (cond, top, bot, fill) => {
+      let seg = [];
+      const flush = () => { if (seg.length > 1) mk("path", { d: "M" + seg.map(([t, a]) => x(t) + " " + y(a)).join(" L") + " L" + seg.slice().reverse().map(([t, , b]) => x(t) + " " + y(b)).join(" L") + " Z", fill }, svg); seg = []; };
+      for (const t of ts) { const p = at(pv, t), l = at(load, t); if (cond(p, l)) seg.push([t, top(p, l), bot(p, l)]); else flush(); }
+      flush();
+    };
+    // tres capas que no se solapan: sol usado en casa, excedente vertido y compra
+    band(() => true, (p, l) => Math.min(p, l), () => 0, "var(--sun-dim)");
+    band((p, l) => p > l, (p) => p, (p, l) => l, "var(--out-band)");
+    band((p, l) => l > p, (p, l) => l, (p) => p, "var(--in-band)");
+    const line = (arr, stroke, w, fill) => {
+      const d = "M" + arr.map(([t, v]) => x(t).toFixed(1) + " " + y(v).toFixed(1)).join(" L");
+      if (fill) mk("path", { d: d + ` L${x(arr[arr.length - 1][0])} ${B} L${x(arr[0][0])} ${B} Z`, fill }, svg);
+      mk("path", { d, fill: "none", stroke, "stroke-width": w, "stroke-linejoin": "round" }, svg);
+    };
+    line(pv, "var(--sun)", 2, null);
+    line(load, "var(--home)", 1.4, null);
+    const peak = pv.reduce((a, b) => b[1] > a[1] ? b : a);
+    mk("circle", { cx: x(peak[0]), cy: y(peak[1]), r: 4, fill: "var(--sun)" }, svg);
+    mk("text", { x: x(peak[0]), y: y(peak[1]) - 10, "text-anchor": "middle", class: "ax" }, svg).textContent = "pico " + nf0.format(peak[1]) + " W · " + hm(new Date(peak[0] * 1000));
+    $("day-note").textContent = "media por minuto · actualizado " + hm(new Date());
+  }
+  const now = Date.now() / 1000;
+  if (now > t0 && now < t1) {
+    mk("line", { x1: x(now), x2: x(now), y1: T, y2: B, stroke: "var(--muted)", "stroke-dasharray": "3 4" }, svg);
+    mk("text", { x: x(now) + 6, y: T + 10, class: "ax" }, svg).textContent = "ahora";
+  }
+  mk("text", { x: x(d0 + 16 * 3600), y: B - 8, "text-anchor": "middle", class: "ax", fill: "var(--steel)" }, svg).textContent = "copia";
+}
+
+function renderSun() {
+  const s = states[E.sun]; if (!s) return;
+  const a = s.a || {};
+  const el = a.elevation, az = a.azimuth;
+  $("sun-el").textContent = el == null ? "–" : nf1.format(el) + "°";
+  $("sun-az").textContent = az == null ? "–" : nf0.format(az) + "°";
+  const day = 864e5;
+  let rise = new Date(a.next_rising), set = new Date(a.next_setting);
+  if (rise > set) rise = new Date(rise - day);            // ya ha salido: la de hoy fue hace un día
+  if (set - rise > day) set = new Date(set - day);
+  const lenMin = (set - rise) / 6e4;
+  $("sun-len").textContent = Math.floor(lenMin / 60) + " h " + String(Math.round(lenMin % 60)).padStart(2, "0");
+
+  const svg = $("sunarc"); svg.textContent = "";
+  const L = 24, R = 336, base = 132, top = 22;
+  const lat = 28.4, doy = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / day);
+  const decl = 23.44 * Math.sin((2 * Math.PI / 365) * (doy - 81));
+  const noonEl = 90 - Math.abs(lat - decl);
+  const pt = f => [L + f * (R - L), base - Math.sin(Math.PI * f) * (base - top)];
+  let d = ""; for (let i = 0; i <= 60; i++) { const [px, py] = pt(i / 60); d += (i ? " L" : "M") + px.toFixed(1) + " " + py.toFixed(1); }
+  mk("line", { x1: 8, x2: 352, y1: base, y2: base, class: "gl" }, svg);
+  mk("path", { d, fill: "none", stroke: "var(--line)", "stroke-width": 2, "stroke-dasharray": "2 5" }, svg);
+  // ventana de la copia sobre el arco
+  const fOf = date => (date - rise) / (set - rise);
+  const d0 = midnight();
+  const w0 = fOf(new Date(+d0 + 15.75 * 36e5)), w1 = fOf(new Date(+d0 + 16.25 * 36e5));
+  if (w0 > 0 && w1 < 1) {
+    let wd = ""; for (let i = 0; i <= 10; i++) { const [px, py] = pt(w0 + (w1 - w0) * i / 10); wd += (i ? " L" : "M") + px.toFixed(1) + " " + py.toFixed(1); }
+    mk("path", { d: wd, fill: "none", stroke: "var(--steel)", "stroke-width": 5, "stroke-linecap": "round" }, svg);
+  }
+  const f = fOf(new Date());
+  if (f > 0 && f < 1) {
+    const [px] = pt(f), py = base - Math.max(0, el) / noonEl * (base - top);
+    mk("circle", { cx: px, cy: py, r: 13, fill: "var(--sun-dim)" }, svg);
+    mk("circle", { cx: px, cy: py, r: 7, fill: "var(--sun)" }, svg);
+  }
+  mk("text", { x: L, y: base + 22, class: "ax", "text-anchor": "start" }, svg).textContent = "↑ " + hm(rise);
+  mk("text", { x: R, y: base + 22, class: "ax", "text-anchor": "end" }, svg).textContent = hm(set) + " ↓";
+  mk("text", { x: (L + R) / 2, y: base + 22, class: "ax", "text-anchor": "middle" }, svg).textContent = "máx. " + nf0.format(noonEl) + "°";
+}
+
+/* tema: sigue al sistema hasta que se elige uno; se recuerda en este navegador */
+function applyTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  const dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  $("theme").textContent = dark ? "Claro" : "Oscuro";
+  renderChart(); renderSun();
+}
+$("theme").onclick = () => {
+  const dark = $("theme").textContent === "Oscuro";
+  const t = dark ? "dark" : "light";
+  try { localStorage.setItem("fv-panel-tema", t); } catch (e) {}
+  applyTheme(t);
+};
+let savedTheme = null; try { savedTheme = localStorage.getItem("fv-panel-tema"); } catch (e) {}
+applyTheme(savedTheme);
+
+/* reloj */
+setInterval(() => { $("clock").textContent = hm(new Date()); }, 1000);
+$("clock").textContent = hm(new Date());
+setInterval(() => { if (ws?.readyState === 1) renderChart(); }, 60000);
+renderChart();
+connect();
+</script>
+</body>
+</html>

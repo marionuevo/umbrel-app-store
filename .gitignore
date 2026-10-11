@@ -1,0 +1,3 @@
+.DS_Store
+# Token de Home Assistant del panel: solo en el Umbrel
+marionuevo-fv-panel/data/config.local.js
