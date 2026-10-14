@@ -54,9 +54,11 @@ main{padding:12px max(16px,env(safe-area-inset-right,0px)) calc(96px + env(safe-
 .link{background:none;border:0;color:var(--accent);padding:0;cursor:pointer;font-weight:500}
 
 .lanes{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;margin-top:10px}
-.lane{border-radius:7px;background:var(--chip);padding:5px 4px 6px;min-width:0;text-align:center}
+.lane{border-radius:7px;background:var(--chip);padding:5px 3px 6px;min-width:0;text-align:center}
 .lane .n{display:block;font:700 13px/1 var(--display);color:var(--muted)}
-.lane .who{display:block;font-size:11.5px;line-height:1.2;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lane .who{display:block;font-size:11px;line-height:1.15;margin-top:3px}
+.lane .who span{display:block;-webkit-hyphens:auto;hyphens:auto;overflow-wrap:anywhere}
+.lane .who span + span{font-weight:600}
 .lane.empty .who{color:var(--muted)}
 .lane.hija{background:var(--hija-soft);color:var(--hija-ink);box-shadow:inset 0 0 0 2px var(--hija)}
 .lane.club{background:var(--club-soft);color:var(--club-ink)}
@@ -259,14 +261,15 @@ function curIndex(){
   return c;
 }
 const nameOf = x => x.nombre === S.destacada.nombre ? (S.destacada.alias || S.cortos[x.nombre]) : S.cortos[x.nombre];
-const surname = x => { const n = nameOf(x); return x.nombre === S.destacada.nombre ? n : n.split(' ').slice(1).join(' ') || n; };
+// En las calles: nombre de pila arriba y primer apellido debajo
+const laneName = x => { const n = (S.cortos[x.nombre] || x.nombre).split(' '); return `<span>${esc(n[0])}</span><span>${esc(n.slice(1).join(' '))}</span>`; };
 
 function lanesHTML(s, para){
   let h = '';
   for (let c = 1; c <= (S.jornada.calles || 6); c++){
     const x = s.calles[c];
     if (!x) { h += `<div class="lane empty"><span class="n">${c}</span><span class="who">—</span></div>`; continue; }
-    h += `<div class="lane ${motivo(x,para)}"><span class="n">${c}</span><span class="who">${esc(surname(x))}</span></div>`;
+    h += `<div class="lane ${motivo(x,para)}"><span class="n">${c}</span><span class="who">${laneName(x)}</span></div>`;
   }
   return `<div class="lanes">${h}</div>`;
 }
