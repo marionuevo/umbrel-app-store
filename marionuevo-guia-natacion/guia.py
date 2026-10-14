@@ -147,6 +147,41 @@ def interes(cfg, est, serie, para="avisar"):
     return out
 
 
+# ---------- longitud hablada ----------
+
+_U = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce",
+      "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve", "veinte", "veintiuno",
+      "veintidós", "veintitrés", "veinticuatro", "veinticinco", "veintiséis", "veintisiete", "veintiocho", "veintinueve"]
+_D = {3: "treinta", 4: "cuarenta", 5: "cincuenta", 6: "sesenta", 7: "setenta", 8: "ochenta", 9: "noventa"}
+_C = {1: "ciento", 2: "doscientos", 3: "trescientos", 4: "cuatrocientos", 5: "quinientos", 6: "seiscientos",
+      7: "setecientos", 8: "ochocientos", 9: "novecientos"}
+
+
+def _numero(n):
+    if n < 30:
+        return _U[n]
+    if n < 100:
+        return _D[n // 10] + ("" if n % 10 == 0 else " y " + _U[n % 10])
+    if n == 100:
+        return "cien"
+    if n < 1000:
+        return _C[n // 100] + ("" if n % 100 == 0 else " " + _numero(n % 100))
+    if n < 2000:
+        return "mil" + ("" if n % 1000 == 0 else " " + _numero(n % 1000))
+    return str(n)
+
+
+def silabas(texto):
+    """Sílabas habladas aproximadas (grupos de vocales), con los números leídos en voz alta.
+
+    Siri pregunta antes de leer un aviso «largo» según lo que tarda en decirlo, no según
+    los caracteres: el 2026-10-14 leyó directamente avisos de hasta 43 sílabas (124
+    caracteres) y preguntó con 45 (114 caracteres) y 53.
+    """
+    t = re.sub(r"\d+", lambda m: " " + _numero(int(m.group())) + " ", texto.lower())
+    return sum(max(1, len(re.findall(r"[aeiouáéíóúü]+", w))) for w in re.findall(r"[a-záéíóúüñ]+", t))
+
+
 def _lista_calles(calles):
     """«calle 4» / «calles 4 y 6» / «calles 1, 4 y 6»."""
     cs = sorted(calles, key=int)
@@ -156,16 +191,15 @@ def _lista_calles(calles):
 
 
 def texto_aviso(cfg, jor, plano, j, actual, cortos, est, previo=False, minutos=None):
-    """Título y texto del aviso, sin pasar de `max_caracteres_aviso` (título + texto).
+    """Título y texto del aviso, sin pasar de `max_silabas_aviso` sílabas habladas (título + texto).
 
-    Siri pregunta antes de leer un aviso largo: con 124 caracteres lo lee y con 137
-    pregunta (comprobado el 2026-10-14). Si no cabe, se acorta por este orden: «cuando»
-    más corto, sin apellidos, sin nombres (solo calles) y sin el total de pruebas. La
-    prueba, la serie, el estilo y la destacada no se quitan nunca.
+    Si no cabe, se acorta por este orden: «cuando» más corto, sin apellidos, solo
+    calles, sin el total de pruebas y, como último recurso, solo cuántos hay de cada
+    club. La prueba, la serie, el estilo y la destacada no se quitan nunca.
     """
     h = plano[j]
     estilo = h["prueba"]["nombre"].lower()
-    limite = cfg.get("max_caracteres_aviso", 120)
+    limite = cfg.get("max_silabas_aviso", 40)
     total = len(jor["pruebas"])
     k = j - actual if actual >= 0 else j + 1
     calles = interes(cfg, est, h["serie"])
@@ -187,11 +221,16 @@ def texto_aviso(cfg, jor, plano, j, actual, cortos, est, previo=False, minutos=N
         return f"En {k} series" if corto else f"Dentro de {k} series"
 
     def gente(nivel):
-        """nivel 0: nombre y apellido; 1: solo nombre; 2: solo calles."""
+        """nivel 0: nombre y apellido; 1: solo nombre; 2: solo calles; 3: cuántos por club; 4: cuántos en total."""
         partes = [f"{alias}, calle {calle_dest}"] if calle_dest else []
+        if nivel == 4:
+            otros = sum(len(v) for v in por_club.values())
+            return ". ".join(partes + ([f"{otros} más de tus filtros"] if otros else []))
         for club in clubes:
             filas = sorted(por_club[club], key=lambda x: int(x[0]))
-            if nivel == 2:
+            if nivel == 3:
+                partes.append(f"{len(filas)} de {club}")
+            elif nivel == 2:
                 partes.append(f"{club}: {_lista_calles([c for c, _ in filas])}")
             else:
                 nombres = [n if nivel == 0 else n.split(" ")[0] for _, n in filas]
@@ -200,19 +239,19 @@ def texto_aviso(cfg, jor, plano, j, actual, cortos, est, previo=False, minutos=N
 
     if previo:
         opciones = [
-            (f"{alias}: prueba {h['p']} de {total}, serie {h['s']} de {h['ns']}",
-             f"Calle {calle_dest}. {estilo.capitalize()}. En unos {minutos} minutos, {cuando(False).lower()}."),
-            (f"{alias}: prueba {h['p']}, serie {h['s']} de {h['ns']}",
-             f"Calle {calle_dest}. {estilo.capitalize()}. En unos {minutos} min, {cuando(True).lower()}."),
+            (f"{alias} en {minutos} minutos",
+             f"Prueba {h['p']} de {total}, serie {h['s']} de {h['ns']}, calle {calle_dest}. {estilo.capitalize()}."),
+            (f"{alias} en {minutos} minutos",
+             f"Prueba {h['p']}, serie {h['s']} de {h['ns']}, calle {calle_dest}. {estilo.capitalize()}."),
         ]
     else:
         opciones = []
         for corto_cuando, nivel, con_total in [(False, 0, True), (True, 0, True), (True, 1, True),
-                                               (True, 2, True), (True, 2, False)]:
+                                               (True, 2, True), (True, 2, False), (True, 3, False), (True, 4, False)]:
             titulo = f"Prueba {h['p']}" + (f" de {total}" if con_total else "") + f", serie {h['s']} de {h['ns']}"
             opciones.append((titulo, f"{cuando(corto_cuando)}. {estilo.capitalize()}. {gente(nivel)}."))
     for titulo, msg in opciones:
-        if len(titulo) + len(msg) <= limite:
+        if silabas(f"{titulo}. {msg}") <= limite:
             return titulo, msg
     return opciones[-1]   # ni así cabe: Siri preguntará, pero el aviso llega igual
 

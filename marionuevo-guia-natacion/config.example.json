@@ -6,5 +6,5 @@
   "alias_clubes": {"C.N. Ejemplo": "Ejemplo"},
   "antelacion_min": 3,
   "antelacion_destacada_min": 8,
-  "max_caracteres_aviso": 120
+  "max_silabas_aviso": 40
 }
