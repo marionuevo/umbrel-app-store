@@ -1,0 +1,22 @@
+version: "3.7"
+
+services:
+  # La página de estado queda detrás del login de Umbrel.
+  app_proxy:
+    environment:
+      APP_HOST: marionuevo-fedecanat-vigia_vigia_1
+      APP_PORT: 8080
+
+  vigia:
+    image: python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844
+    restart: unless-stopped
+    stop_grace_period: 5s
+    # Usuario umbrel: data/ es suya y así el estado se escribe sin sudo.
+    user: "1000:1000"
+    command: ["python", "-I", "/app/vigia.py"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ${APP_DATA_DIR}/vigia.py:/app/vigia.py:ro
+      # config.json (no está en git: lleva el webhook de Home Assistant) y estado.json
+      - ${APP_DATA_DIR}/data:/data

@@ -1,0 +1,8 @@
+{
+  "servidor": "http://fedecanat.es",
+  "share_token": "sRjA0sPnknwxmjx",
+  "carpeta": "/2-TENERIFE/",
+  "intervalo_min": 15,
+  "enlace": "http://fedecanat.es/owncloud/index.php/s/sRjA0sPnknwxmjx?path=%2F2-TENERIFE",
+  "webhook": "http://10.80.20.22:8123/api/webhook/<id-del-webhook>"
+}

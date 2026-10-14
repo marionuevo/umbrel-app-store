@@ -1,3 +1,8 @@
 .DS_Store
 # Token de Home Assistant del panel: solo en el Umbrel
 marionuevo-fv-panel/data/config.local.js
+
+# Vigía Fedecanat: config con el webhook de Home Assistant y estado, solo en el Umbrel
+marionuevo-fedecanat-vigia/data/config.json
+marionuevo-fedecanat-vigia/data/estado.json
+marionuevo-fedecanat-vigia/data/*.tmp

@@ -1,0 +1,29 @@
+manifestVersion: 1
+id: marionuevo-fedecanat-vigia
+icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fedecanat-vigia/icon.svg
+category: automation
+name: Vigía Fedecanat
+version: "1.0.0"
+tagline: Aviso al iPhone cuando la federación sube listas de salida o resultados
+description: >
+  Vigila una carpeta compartida del owncloud de la Federación Canaria de
+  Natación (por defecto la de Tenerife) cada 15 minutos. Cuando aparece un
+  archivo o una carpeta, o cambia uno que ya estaba, llama a un webhook de Home
+  Assistant, que manda el aviso al iPhone con el enlace a la carpeta.
+
+
+  La página de la app muestra la última comprobación, el contenido de la
+  carpeta y el historial de avisos. La configuración va en data/config.json
+  dentro de la app (ver README).
+developer: Mario
+website: https://github.com/marionuevo/umbrel-app-store
+dependencies: []
+repo: https://github.com/marionuevo/umbrel-app-store
+support: https://github.com/marionuevo/umbrel-app-store/issues
+port: 9096
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+releaseNotes: >
+  Primera versión.
