@@ -13,6 +13,18 @@ Línea de tiempo en directo de una jornada de natación, pensada para el móvil.
 - **Interés:** la nadadora destacada y el club destacado entran siempre, tanto en lo que se ve como en lo que avisa. Además hay dos filtros independientes, guardados en el estado: `ver` (qué se destaca en la línea de tiempo y si se ocultan las series sin interés) y `avisar` (qué clubes y nadadores generan aviso).
 - **Nombres en el audio:** el nombre de pila y el primer apellido. Las partículas van con la palabra siguiente. Si salen más de dos apellidos, el primero es todo menos el último. Si dos nombres coinciden, se añade el segundo apellido. A la destacada se la nombra por su `alias`.
 
+## Interfaz
+
+- Un solo tema oscuro con fondo azul marino, para leerse bien al sol. La nadadora destacada va en dorado, el club destacado en violeta y el resto de filtros en verde agua. La serie que nada ahora lleva un borde rojo.
+- Tres pestañas: **Jornada** (lo que nada ahora, los próximos avisos y la línea de tiempo), **Filtros** (Ver y Avisar) y **Avisos** (activar o silenciar, antelación, aviso de prueba, marcador e historial). Las vistas se ocultan con el atributo `hidden`; la regla `[hidden]{display:none!important}` es necesaria porque `main` y `.dock` tienen su propio `display`.
+- Cada serie muestra sus 6 calles con el nombre de pila arriba y el primer apellido debajo; los nombres largos se parten con guion (`hyphens:auto`). Debajo se listan los nadadores destacados con su marca.
+- La barra inferior (−1 serie, Ahora, +1 serie) solo aparece en la pestaña Jornada. Si todavía no ha empezado ninguna serie, «Ahora» lleva a la primera prueba.
+- La web consulta `api/estado` cada 15 s y al volver a la pestaña; la hora y la serie actual se recalculan cada segundo en el navegador.
+
+## Privacidad
+
+El repo es público. Los nombres de los nadadores, la destacada y el webhook solo están en `data/` del Umbrel (ignorado en git) y en `~/.guia-natacion/`. Los textos de la web que nombran a la destacada o al club salen de la configuración. En el Mac hay un hook `pre-commit` local que bloquea los commits con nombres de inscritos.
+
 ## Archivos en `data/` (no están en git)
 
 | Archivo | Qué es |
