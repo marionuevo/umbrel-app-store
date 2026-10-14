@@ -6,3 +6,4 @@ marionuevo-fv-panel/data/config.local.js
 marionuevo-fedecanat-vigia/data/config.json
 marionuevo-fedecanat-vigia/data/estado.json
 marionuevo-fedecanat-vigia/data/*.tmp
+__pycache__/
