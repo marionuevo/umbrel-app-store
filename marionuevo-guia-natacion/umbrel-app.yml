@@ -3,7 +3,7 @@ id: marionuevo-guia-natacion
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-guia-natacion/icon.svg
 category: automation
 name: Guía de jornada
-version: "1.0.3"
+version: "1.0.4"
 tagline: Línea de tiempo de una competición de natación con avisos por audio
 description: >
   Línea de tiempo en directo de una jornada de natación: qué serie nada ahora,
@@ -27,4 +27,4 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  Las pestañas Jornada, Filtros y Avisos cambian de vista de verdad.
+  Los avisos no pasan de 120 caracteres para que Siri los lea sin preguntar.

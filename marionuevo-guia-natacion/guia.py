@@ -147,32 +147,74 @@ def interes(cfg, est, serie, para="avisar"):
     return out
 
 
+def _lista_calles(calles):
+    """«calle 4» / «calles 4 y 6» / «calles 1, 4 y 6»."""
+    cs = sorted(calles, key=int)
+    if len(cs) == 1:
+        return f"calle {cs[0]}"
+    return "calles " + ", ".join(cs[:-1]) + f" y {cs[-1]}"
+
+
 def texto_aviso(cfg, jor, plano, j, actual, cortos, est, previo=False, minutos=None):
+    """Título y texto del aviso, sin pasar de `max_caracteres_aviso` (título + texto).
+
+    Siri pregunta antes de leer un aviso largo: con 124 caracteres lo lee y con 137
+    pregunta (comprobado el 2026-10-14). Si no cabe, se acorta por este orden: «cuando»
+    más corto, sin apellidos, sin nombres (solo calles) y sin el total de pruebas. La
+    prueba, la serie, el estilo y la destacada no se quitan nunca.
+    """
     h = plano[j]
-    p = h["prueba"]
-    estilo = p["nombre"].lower()
-    titulo = f"Prueba {h['p']} de {len(jor['pruebas'])}, serie {h['s']} de {h['ns']}"
+    estilo = h["prueba"]["nombre"].lower()
+    limite = cfg.get("max_caracteres_aviso", 120)
+    total = len(jor["pruebas"])
     k = j - actual if actual >= 0 else j + 1
-    cuando = "Ahora" if k <= 0 else "En la siguiente serie" if k == 1 else f"Dentro de {k} series"
     calles = interes(cfg, est, h["serie"])
     dest = cfg.get("destacada", {})
-    partes = []
-    for calle, x, motivo in calles:
-        if motivo == "destacada":
-            partes.append(f"{dest.get('alias', cortos[x['nombre']])}, calle {calle}")
+    alias = dest.get("alias", "")
+    calle_dest = next((c for c, x, m in calles if m == "destacada"), None)
+    club_dest = club_corto(cfg, cfg.get("club_destacado", ""))
     por_club = {}
     for calle, x, motivo in calles:
         if motivo != "destacada":
-            por_club.setdefault(club_corto(cfg, x["club"]), []).append(f"calle {calle}, {cortos[x['nombre']]}")
-    club_dest = club_corto(cfg, cfg.get("club_destacado", ""))
-    for club in sorted(por_club, key=lambda c: (c != club_dest, c)):
-        partes.append(f"{club}: " + "; ".join(por_club[club]))
+            por_club.setdefault(club_corto(cfg, x["club"]), []).append((calle, cortos[x["nombre"]]))
+    clubes = sorted(por_club, key=lambda c: (c != club_dest, c))
+
+    def cuando(corto):
+        if k <= 0:
+            return "Ahora"
+        if k == 1:
+            return "En la siguiente" if corto else "En la siguiente serie"
+        return f"En {k} series" if corto else f"Dentro de {k} series"
+
+    def gente(nivel):
+        """nivel 0: nombre y apellido; 1: solo nombre; 2: solo calles."""
+        partes = [f"{alias}, calle {calle_dest}"] if calle_dest else []
+        for club in clubes:
+            filas = sorted(por_club[club], key=lambda x: int(x[0]))
+            if nivel == 2:
+                partes.append(f"{club}: {_lista_calles([c for c, _ in filas])}")
+            else:
+                nombres = [n if nivel == 0 else n.split(" ")[0] for _, n in filas]
+                partes.append(f"{club}: " + "; ".join(f"calle {c}, {n}" for (c, _), n in zip(filas, nombres)))
+        return ". ".join(partes)
+
     if previo:
-        alias = dest.get("alias", "")
-        titulo = f"{alias}: prueba {h['p']} de {len(jor['pruebas'])}, serie {h['s']} de {h['ns']}"
-        calle = next(c for c, x, m in calles if m == "destacada")
-        return titulo, f"Calle {calle}. {estilo.capitalize()}. En unos {minutos} minutos, {cuando.lower()}."
-    return titulo, f"{cuando}. {estilo.capitalize()}. " + ". ".join(partes) + "."
+        opciones = [
+            (f"{alias}: prueba {h['p']} de {total}, serie {h['s']} de {h['ns']}",
+             f"Calle {calle_dest}. {estilo.capitalize()}. En unos {minutos} minutos, {cuando(False).lower()}."),
+            (f"{alias}: prueba {h['p']}, serie {h['s']} de {h['ns']}",
+             f"Calle {calle_dest}. {estilo.capitalize()}. En unos {minutos} min, {cuando(True).lower()}."),
+        ]
+    else:
+        opciones = []
+        for corto_cuando, nivel, con_total in [(False, 0, True), (True, 0, True), (True, 1, True),
+                                               (True, 2, True), (True, 2, False)]:
+            titulo = f"Prueba {h['p']}" + (f" de {total}" if con_total else "") + f", serie {h['s']} de {h['ns']}"
+            opciones.append((titulo, f"{cuando(corto_cuando)}. {estilo.capitalize()}. {gente(nivel)}."))
+    for titulo, msg in opciones:
+        if len(titulo) + len(msg) <= limite:
+            return titulo, msg
+    return opciones[-1]   # ni así cabe: Siri preguntará, pero el aviso llega igual
 
 
 def enviar(cfg, titulo, mensaje):
