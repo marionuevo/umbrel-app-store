@@ -4,31 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0a6a8c">
+<meta name="theme-color" content="#0b1d3a">
 <title>Guía de jornada</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Línea de tiempo vertical de la jornada; arriba lo que nada ahora, abajo los mandos a mano del pulgar */
+/* Línea de tiempo vertical de la jornada; arriba lo que nada ahora, abajo los mandos a mano del pulgar.
+   Un solo tema: fondo azul marino; la nadadora destacada en dorado, el club destacado en violeta y el resto de filtros en verde agua */
 :root{
-  --bg:#eef3f4; --surface:#ffffff; --ink:#0f2229; --muted:#566b73; --line:#d4dfe2; --chip:#e3ecee;
-  --accent:#0a6a8c; --accent-ink:#ffffff;
-  --hija:#b97f00; --hija-soft:#fff1c7; --hija-ink:#5c3f00;
-  --club:#0d7a5f; --club-soft:#d6efe6; --club-ink:#0a4a3a;
-  --filtro:#5a4bc2; --filtro-soft:#e6e3fa; --filtro-ink:#2f2580;
-  --now:#c8412c; --now-soft:#fbe3de;
+  --bg:#0b1d3a; --surface:#122a4d; --ink:#eaf1fb; --muted:#9fb2ce; --line:#24426c; --chip:#1a355c;
+  --accent:#4cc3e6; --accent-ink:#06182e;
+  --hija:#f2b632; --hija-soft:#4a3a10; --hija-ink:#ffe3a3;
+  --club:#9a6bff; --club-soft:#36286b; --club-ink:#e6dcff;
+  --filtro:#2bbf9a; --filtro-soft:#103f45; --filtro-ink:#b8f2e2;
+  --now:#ff6b55; --now-soft:#40203a;
   --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  color-scheme:light;
+  color-scheme:dark;
 }
-@media (prefers-color-scheme:dark){:root{
-  --bg:#0b1619; --surface:#122227; --ink:#e4eef0; --muted:#8ea3aa; --line:#22383e; --chip:#1a2e34;
-  --accent:#55b9dc; --accent-ink:#06171d;
-  --hija:#f2b632; --hija-soft:#3a2c08; --hija-ink:#ffe3a3;
-  --club:#3ccf9f; --club-soft:#0f3a2e; --club-ink:#b5f0dc;
-  --filtro:#a99bff; --filtro-soft:#272152; --filtro-ink:#dcd6ff;
-  --now:#ff6b55; --now-soft:#3d1a14; color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 var(--body);-webkit-text-size-adjust:100%}
 button{font:inherit;color:inherit}
@@ -98,7 +92,7 @@ main{padding:12px max(16px,env(safe-area-inset-right,0px)) calc(96px + env(safe-
 .heat.current{background:var(--now-soft);box-shadow:inset 4px 0 0 var(--now)}
 .pill{font:600 11px var(--body);letter-spacing:.06em;text-transform:uppercase;background:var(--now);color:#fff;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:2px}
 .bell{width:13px;height:13px;vertical-align:-1px;margin-left:5px;fill:currentColor;color:var(--muted)}
-.bell.sent{color:var(--club)}
+.bell.sent{color:var(--accent)}
 .names{margin-top:6px;display:grid;gap:2px;font-size:13.5px}
 .names .h{color:var(--hija-ink);font-weight:600}
 .names .c{color:var(--club-ink)}
@@ -125,7 +119,7 @@ main{padding:12px max(16px,env(safe-area-inset-right,0px)) calc(96px + env(safe-
 
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 11px;font-size:13.5px;cursor:pointer}
-.chip[aria-pressed=true]{background:var(--filtro);border-color:var(--filtro);color:#fff}
+.chip[aria-pressed=true]{background:var(--filtro);border-color:var(--filtro);color:var(--accent-ink)}
 .chip.lock{cursor:default}
 .chip.lock.hija{background:var(--hija-soft);border-color:var(--hija);color:var(--hija-ink)}
 .chip.lock.club{background:var(--club-soft);border-color:var(--club);color:var(--club-ink)}
@@ -136,8 +130,8 @@ main{padding:12px max(16px,env(safe-area-inset-right,0px)) calc(96px + env(safe-
 .results small{color:var(--muted)}
 .toggle{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px}
 .switch{appearance:none;width:46px;height:28px;border-radius:14px;background:var(--line);position:relative;cursor:pointer;flex:none;transition:background .15s}
-.switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
-.switch:checked{background:var(--club)}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--ink);transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.switch:checked{background:var(--accent)}
 .switch:checked::after{transform:translateX(18px)}
 .stepper{display:flex;align-items:center;gap:10px}
 .stepper button{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-weight:700;cursor:pointer}
