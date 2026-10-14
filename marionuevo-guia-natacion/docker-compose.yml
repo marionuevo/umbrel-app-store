@@ -1,0 +1,23 @@
+version: "3.7"
+
+services:
+  # La guía queda detrás del login de Umbrel: lleva nombres de nadadores.
+  app_proxy:
+    environment:
+      APP_HOST: marionuevo-guia-natacion_guia_1
+      APP_PORT: 8080
+
+  guia:
+    # La misma imagen que Vigía Fedecanat.
+    image: python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844
+    restart: unless-stopped
+    stop_grace_period: 5s
+    user: "1000:1000"
+    command: ["python", "-I", "/app/guia.py"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ${APP_DATA_DIR}/guia.py:/app/guia.py:ro
+      - ${APP_DATA_DIR}/www:/app/www:ro
+      # config.json, jornada.json y estado.json: no están en git (datos personales)
+      - ${APP_DATA_DIR}/data:/data

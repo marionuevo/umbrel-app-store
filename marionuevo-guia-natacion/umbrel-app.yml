@@ -1,0 +1,30 @@
+manifestVersion: 1
+id: marionuevo-guia-natacion
+icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-guia-natacion/icon.svg
+category: automation
+name: Guía de jornada
+version: "1.0.0"
+tagline: Línea de tiempo de una competición de natación con avisos por audio
+description: >
+  Línea de tiempo en directo de una jornada de natación: qué serie nada ahora,
+  quién va en cada calle y a qué hora se estima cada serie. El marcador se
+  puede recolocar desde el móvil si la competición va retrasada o adelantada,
+  y todo se reestima desde ahí.
+
+
+  Las series con nadadores o clubes elegidos generan un aviso urgente en el
+  iPhone a través de Home Assistant, que Siri lee por los AirPods aunque el
+  móvil esté bloqueado y suene música. La jornada y la configuración van en
+  data/ dentro de la app (ver README).
+developer: Mario
+website: https://github.com/marionuevo/umbrel-app-store
+dependencies: []
+repo: https://github.com/marionuevo/umbrel-app-store
+support: https://github.com/marionuevo/umbrel-app-store/issues
+port: 9097
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+releaseNotes: >
+  Primera versión.

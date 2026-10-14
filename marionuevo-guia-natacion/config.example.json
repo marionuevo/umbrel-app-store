@@ -1,0 +1,9 @@
+{
+  "webhook": "http://10.80.20.22:8123/api/webhook/<id-del-webhook>",
+  "url_guia": "http://<ip-de-tailscale-del-umbrel>:9097",
+  "destacada": {"nombre": "APELLIDOS, Nombre", "alias": "Nombre"},
+  "club_destacado": "Nombre del club tal como sale en las listas",
+  "alias_clubes": {"C.N. Ejemplo": "Ejemplo"},
+  "antelacion_min": 3,
+  "antelacion_destacada_min": 8
+}

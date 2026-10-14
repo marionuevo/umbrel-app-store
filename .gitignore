@@ -7,3 +7,7 @@ marionuevo-fedecanat-vigia/data/config.json
 marionuevo-fedecanat-vigia/data/estado.json
 marionuevo-fedecanat-vigia/data/*.tmp
 __pycache__/
+
+# Guía de jornada: config, jornada (nombres de nadadores) y estado, solo en el Umbrel
+marionuevo-guia-natacion/data/*.json
+marionuevo-guia-natacion/data/*.tmp
