@@ -74,6 +74,7 @@ button.link:hover, button.link:focus-visible { color: var(--fg); }
 .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; min-width: 0; display: grid; gap: 12px; align-content: start; }
 .card h2 { font-weight: 400; font-size: 1rem; margin: 0; display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.state { grid-column: span 12; }
 .flow { grid-column: span 7; }
 .figures { grid-column: span 5; }
 .day { grid-column: span 12; }
@@ -83,14 +84,26 @@ button.link:hover, button.link:focus-visible { color: var(--fg); }
 @media (max-width: 1100px) { .flow, .figures { grid-column: span 12; } .sunc, .inv, .tally { grid-column: span 6; } .tally { grid-column: span 12; } }
 @media (max-width: 720px) { .sunc, .inv, .tally { grid-column: span 12; } }
 
+/* estado: la respuesta de un vistazo («¿vierto o compro?») */
+.state { --tone: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; padding: 14px 20px; border-left: 6px solid var(--tone); }
+.state.out { --tone: var(--grid-out); }
+.state.in { --tone: var(--grid-in); }
+.state.even { --tone: var(--sun); }
+.state .head { font-size: clamp(1.5rem, 3.2vw, 2.2rem); line-height: 1.1; color: var(--tone); }
+.state .head .num { letter-spacing: -.01em; }
+.state .why { color: var(--muted); font-size: .95rem; flex: 1 1 260px; }
+.state .rate { display: grid; justify-items: end; gap: 2px; margin-left: auto; }
+.state .rate .v { font-family: var(--font-num); font-size: 1.4rem; color: var(--tone); }
+
 /* flujos */
 .flow svg { width: 100%; height: auto; display: block; }
 .node-ring { fill: var(--panel); stroke-width: 2; }
 .node-val { font-family: var(--font-num); font-size: 26px; fill: var(--fg); }
 .node-unit { font-family: var(--font-num); font-size: 13px; fill: var(--muted); }
 .node-name { font-family: var(--font-display); font-size: 14px; fill: var(--muted); letter-spacing: .04em; }
-.wire { fill: none; stroke: var(--line); stroke-width: 3; stroke-linecap: round; }
-.pulse { fill: none; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 2 18; opacity: 0; transition: opacity .6s; }
+/* el cable engorda con la potencia, como un Sankey; los pulsos van por encima */
+.wire { fill: none; stroke: var(--line); stroke-width: 3; stroke-linecap: round; transition: stroke-width .8s ease, stroke .6s; }
+.pulse { fill: none; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 2 18; opacity: 0; transition: opacity .6s, stroke-width .8s ease; }
 .pulse.active { opacity: 1; animation: flow linear infinite; }
 @keyframes flow { to { stroke-dashoffset: -200; } }
 .wire-label { font-family: var(--font-num); font-size: 12px; fill: var(--muted); }
@@ -117,7 +130,11 @@ button.link:hover, button.link:focus-visible { color: var(--fg); }
 /* curva del día */
 .day svg { width: 100%; height: auto; display: block; }
 .chart-wrap { overflow-x: auto; }
-.chart-wrap svg { min-width: 640px; }
+.chart-wrap svg { min-width: 640px; cursor: crosshair; }
+.zero { stroke: var(--muted); stroke-width: 1; }
+.tip-bg { fill: var(--bg); stroke: var(--line); }
+.tip { font-family: var(--font-num); font-size: 13px; fill: var(--fg); }
+.tip-k { font-family: var(--font-num); font-size: 12px; fill: var(--muted); }
 .ax { font-family: var(--font-num); font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
 .gl { stroke: var(--line); stroke-width: 1; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .8rem; color: var(--muted); }
@@ -163,7 +180,7 @@ dialog input:focus-visible, .btn:focus-visible { outline: 2px solid var(--steel)
 @media (prefers-reduced-motion: reduce) {
   .pulse.active { animation: none; stroke-dasharray: none; opacity: .9; }
   .live.on i { animation: none; }
-  .meter > i, .ring .fg, .tally .bar i { transition: none; }
+  .meter > i, .ring .fg, .tally .bar i, .wire, .pulse { transition: none; }
 }
 </style>
 </head>
@@ -180,6 +197,13 @@ dialog input:focus-visible, .btn:focus-visible { outline: 2px solid var(--steel)
   </header>
 
   <div class="grid">
+    <!-- Estado de un vistazo -->
+    <section class="card state" id="state" aria-label="Estado ahora">
+      <div class="head" id="st-head">Esperando datos…</div>
+      <div class="why" id="st-why"></div>
+      <div class="rate"><span class="label" id="st-rate-k"></span><span class="v" id="st-rate"></span></div>
+    </section>
+
     <!-- Diagrama de flujos -->
     <section class="card flow" aria-labelledby="h-flow">
       <h2 id="h-flow"><span>Ahora mismo</span><span class="label" id="flow-note">placas → casa → red</span></h2>
@@ -252,13 +276,12 @@ dialog input:focus-visible, .btn:focus-visible { outline: 2px solid var(--steel)
     <!-- Curva del día -->
     <section class="card day" aria-labelledby="h-day">
       <h2 id="h-day"><span>Hoy</span><span class="label" id="day-note"></span></h2>
-      <div class="chart-wrap"><svg id="chart" viewBox="0 0 1200 300" role="img" aria-label="Producción y consumo de hoy"></svg></div>
+      <div class="chart-wrap"><svg id="chart" viewBox="0 0 1200 340" role="img" aria-label="Producción y consumo de hoy: arriba lo que da el sol, abajo lo que se compra"></svg></div>
       <div class="legend">
         <span><i class="sw" style="background:transparent;border-top:2px solid var(--sun)"></i>Producción</span>
         <span><i class="sw" style="background:var(--sun-dim)"></i>Sol usado en casa</span>
-        <span><i class="sw" style="background:transparent;border-top:2px solid var(--home)"></i>Consumo de la casa</span>
         <span><i class="sw" style="background:var(--out-band)"></i>Excedente vertido</span>
-        <span><i class="sw" style="background:var(--in-band)"></i>Comprado a la red</span>
+        <span><i class="sw" style="background:var(--in-band)"></i>Comprado a la red (bajo el cero)</span>
         <span><i class="sw" style="background:var(--steel-dim);outline:1px solid var(--steel);outline-offset:-1px"></i>Ventana de la copia del TrueNAS</span>
       </div>
     </section>
@@ -503,13 +526,40 @@ async function loadTodayStats() {
 
 /* ---------- dibujo ---------- */
 function setPulse(id, w, labelId, text) {
-  const p = $(id);
+  const p = $(id), wire = $("w" + id.slice(1));
   const active = w != null && w > 15;
   p.classList.toggle("active", active);
   // velocidad proporcional a la potencia: 3 kW ≈ 1,2 s por vuelta del patrón
   if (active) p.style.animationDuration = Math.max(1.2, Math.min(14, 3600 / w)) + "s";
-  p.style.strokeWidth = active ? (2.5 + Math.min(5, w / 600)) : 4;
+  p.style.strokeWidth = active ? (2.5 + Math.min(4, w / 750)) : 4;
+  // grosor del cable proporcional a la potencia: de 3 a 18 px a los 3 kW del inversor
+  wire.style.strokeWidth = active ? 3 + 15 * Math.min(1, w / INVERTER_W) : 3;
+  wire.style.stroke = active ? `color-mix(in srgb, ${p.style.stroke} 28%, transparent)` : "";
   $(labelId).textContent = active ? text : "";
+}
+
+function renderState(pv, load, grid, pvHome, exp, imp) {
+  const el = $("state"), head = $("st-head"), why = $("st-why");
+  const timp = num("timp"), texp = num("texp");
+  const W = v => `<span class="num">${nf0.format(v)}</span> W`;
+  let tone = "", rateK = "", rate = "";
+  if (pv == null || load == null || grid == null) { head.textContent = "Esperando datos…"; why.textContent = ""; }
+  else if (grid < -5) {
+    tone = "out"; head.innerHTML = "Vertiendo " + W(exp);
+    why.textContent = `El sol cubre toda la casa (${nf0.format(load)} W) y sobra.`;
+    if (texp != null) { rateK = "se compensa a"; rate = eur.format(exp / 1000 * texp) + "/h"; }
+  } else if (grid > 5) {
+    tone = "in"; head.innerHTML = "Comprando " + W(imp);
+    const pct = load > 0 ? Math.round(pvHome / load * 100) : 0;
+    why.textContent = pv > 15 && pct > 0 ? `El sol cubre el ${pct} % de la casa; el resto viene de la red.`
+      : (states[E.sun]?.s === "below_horizon" ? "De noche: toda la casa tira de la red." : "Sin producción: toda la casa tira de la red.");
+    if (timp != null) { rateK = "cuesta"; rate = eur.format(imp / 1000 * timp) + "/h"; }
+  } else {
+    tone = "even"; head.textContent = "En equilibrio";
+    why.textContent = "Las placas dan justo lo que gasta la casa.";
+  }
+  el.className = "card state " + tone;
+  $("st-rate-k").textContent = rateK; $("st-rate").textContent = rate;
 }
 
 function render() {
@@ -528,6 +578,7 @@ function render() {
   setPulse("p-pv-home", pvHome, "l-pv-home", pvHome != null ? nf0.format(pvHome) + " W" : "");
   setPulse("p-pv-grid", exp, "l-pv-grid", nf0.format(exp) + " W");
   setPulse("p-grid-home", imp, "l-grid-home", nf0.format(imp) + " W");
+  renderState(pv, load, grid, pvHome, exp, imp);
 
   const nasOn = states[E.nas]?.s === "on";
   const copia = states[E.copia]?.s === "on", mant = states[E.mant]?.s === "on";
@@ -587,24 +638,42 @@ function renderTally(edayWh, timp, texp) {
   $("tally-note").textContent = "desde las 00:00";
 }
 
-/* curva del día: eje de 06:00 a 21:00 */
+/* curva del día: eje de 06:00 a 21:00. Con signo, como Tesla u Homey: encima del cero lo que da
+   el sol (usado en casa abajo, vertido apilado encima, así el borde es la producción) y debajo lo
+   que se compra. Misma escala arriba y abajo. Al pasar el ratón o tocar, el valor de ese minuto. */
 const NS = "http://www.w3.org/2000/svg";
 const mk = (tag, attrs, parent) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); parent && parent.appendChild(n); return n; };
+// valor de una serie [t, v] en t (el último punto anterior)
+const seriesAt = (arr, t) => { let lo = 0, hi = arr.length - 1; if (t <= arr[0][0]) return arr[0][1]; if (t >= arr[hi][0]) return arr[hi][1];
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; arr[m][0] <= t ? lo = m : hi = m; } return arr[lo][1]; };
+
+const CH = { W: 1200, H: 340, L: 54, R: 1186, T: 14, B: 306 };
+let scrubT = null, scrubTimer;
 
 function renderChart() {
   const svg = $("chart"); svg.textContent = "";
-  const W = 1200, H = 300, L = 54, R = 1186, T = 14, B = 266;
+  const { L, R, T, B } = CH;
   const d0 = midnight().getTime() / 1000, t0 = d0 + 6 * 3600, t1 = d0 + 21 * 3600;
-  const all = [...series.pv, ...series.load].map(p => p[1]);
-  const ymax = Math.max(3200, Math.ceil(Math.max(0, ...all) / 500) * 500);
   const x = t => L + (Math.min(Math.max(t, t0), t1) - t0) / (t1 - t0) * (R - L);
-  const y = v => B - v / ymax * (B - T);
+
+  const pv = series.pv.filter(p => p[0] >= t0 && p[0] <= t1);
+  const load = series.load.filter(p => p[0] >= t0 && p[0] <= t1);
+  const has = pv.length > 1 && load.length > 1;
+  // rejilla común de 2 min para repartir autoconsumo / vertido / compra
+  const step = 120, tEnd = Math.min(t1, Date.now() / 1000);
+  const ts = []; if (has) for (let t = Math.max(t0, pv[0][0]); t <= tEnd; t += step) ts.push(t);
+  const pts = ts.map(t => { const p = seriesAt(pv, t), l = seriesAt(load, t); return [t, Math.min(p, l), Math.max(0, p - l), Math.max(0, l - p)]; });
+
+  const posMax = Math.max(3200, Math.ceil(Math.max(0, ...pv.map(p => p[1])) / 500) * 500);
+  const negMax = Math.max(1000, Math.ceil(Math.max(0, ...pts.map(p => p[3])) / 500) * 500);
+  const k = (B - T) / (posMax + negMax), Y0 = T + posMax * k;
+  const y = v => Y0 - v * k;
 
   // ventana de la copia del TrueNAS
   mk("rect", { x: x(d0 + 15.75 * 3600), y: T, width: x(d0 + 16.25 * 3600) - x(d0 + 15.75 * 3600), height: B - T, fill: "var(--steel-dim)" }, svg);
-  for (let v = 0; v <= ymax; v += 1000) {
-    mk("line", { x1: L, x2: R, y1: y(v), y2: y(v), class: "gl" }, svg);
-    mk("text", { x: L - 8, y: y(v) + 4, "text-anchor": "end", class: "ax" }, svg).textContent = v ? nf0.format(v / 1000) + " kW" : "0";
+  for (let v = -Math.floor(negMax / 1000) * 1000; v <= posMax; v += 1000) {
+    if (v) mk("line", { x1: L, x2: R, y1: y(v), y2: y(v), class: "gl" }, svg);
+    mk("text", { x: L - 8, y: y(v) + 4, "text-anchor": "end", class: "ax" }, svg).textContent = v ? (v < 0 ? "−" : "") + nf0.format(Math.abs(v) / 1000) + " kW" : "0";
   }
   for (let h = 6; h <= 21; h += 1) {
     const tx = x(d0 + h * 3600);
@@ -612,43 +681,62 @@ function renderChart() {
     if (h % 3 === 0) mk("line", { x1: tx, x2: tx, y1: B, y2: B + 5, class: "gl" }, svg);
   }
 
-  const pv = series.pv.filter(p => p[0] >= t0 && p[0] <= t1);
-  const load = series.load.filter(p => p[0] >= t0 && p[0] <= t1);
-  if (pv.length > 1 && load.length > 1) {
-    // rejilla común de 2 min para excedente / compra
-    const step = 120, tEnd = Math.min(t1, Date.now() / 1000);
-    const at = (arr, t) => { let lo = 0, hi = arr.length - 1; if (t <= arr[0][0]) return arr[0][1]; if (t >= arr[hi][0]) return arr[hi][1];
-      while (hi - lo > 1) { const m = (lo + hi) >> 1; arr[m][0] <= t ? lo = m : hi = m; } return arr[lo][1]; };
-    const ts = []; for (let t = Math.max(t0, pv[0][0]); t <= tEnd; t += step) ts.push(t);
+  if (has) {
     const band = (cond, top, bot, fill) => {
       let seg = [];
       const flush = () => { if (seg.length > 1) mk("path", { d: "M" + seg.map(([t, a]) => x(t) + " " + y(a)).join(" L") + " L" + seg.slice().reverse().map(([t, , b]) => x(t) + " " + y(b)).join(" L") + " Z", fill }, svg); seg = []; };
-      for (const t of ts) { const p = at(pv, t), l = at(load, t); if (cond(p, l)) seg.push([t, top(p, l), bot(p, l)]); else flush(); }
+      for (const p of pts) { if (cond(p)) seg.push([p[0], top(p), bot(p)]); else flush(); }
       flush();
     };
-    // tres capas que no se solapan: sol usado en casa, excedente vertido y compra
-    band(() => true, (p, l) => Math.min(p, l), () => 0, "var(--sun-dim)");
-    band((p, l) => p > l, (p) => p, (p, l) => l, "var(--out-band)");
-    band((p, l) => l > p, (p, l) => l, (p) => p, "var(--in-band)");
-    const line = (arr, stroke, w, fill) => {
-      const d = "M" + arr.map(([t, v]) => x(t).toFixed(1) + " " + y(v).toFixed(1)).join(" L");
-      if (fill) mk("path", { d: d + ` L${x(arr[arr.length - 1][0])} ${B} L${x(arr[0][0])} ${B} Z`, fill }, svg);
-      mk("path", { d, fill: "none", stroke, "stroke-width": w, "stroke-linejoin": "round" }, svg);
-    };
-    line(pv, "var(--sun)", 2, null);
-    line(load, "var(--home)", 1.4, null);
+    band(() => true, p => p[1], () => 0, "var(--sun-dim)");                 // sol usado en casa
+    band(p => p[2] > 0, p => p[1] + p[2], p => p[1], "var(--out-band)");   // vertido, encima
+    band(p => p[3] > 0, () => 0, p => -p[3], "var(--in-band)");            // compra, bajo el cero
+    mk("path", { d: "M" + pv.map(([t, v]) => x(t).toFixed(1) + " " + y(v).toFixed(1)).join(" L"), fill: "none", stroke: "var(--sun)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
     const peak = pv.reduce((a, b) => b[1] > a[1] ? b : a);
     mk("circle", { cx: x(peak[0]), cy: y(peak[1]), r: 4, fill: "var(--sun)" }, svg);
     mk("text", { x: x(peak[0]), y: y(peak[1]) - 10, "text-anchor": "middle", class: "ax" }, svg).textContent = "pico " + nf0.format(peak[1]) + " W · " + hm(new Date(peak[0] * 1000));
     $("day-note").textContent = "media por minuto · actualizado " + hm(new Date());
   }
+  mk("line", { x1: L, x2: R, y1: Y0, y2: Y0, class: "zero" }, svg);
+  mk("text", { x: L - 8, y: Y0 - 12, "text-anchor": "end", class: "ax" }, svg).textContent = "sol ↑";
+  mk("text", { x: L - 8, y: Y0 + 20, "text-anchor": "end", class: "ax" }, svg).textContent = "red ↓";
   const now = Date.now() / 1000;
   if (now > t0 && now < t1) {
     mk("line", { x1: x(now), x2: x(now), y1: T, y2: B, stroke: "var(--muted)", "stroke-dasharray": "3 4" }, svg);
     mk("text", { x: x(now) + 6, y: T + 10, class: "ax" }, svg).textContent = "ahora";
   }
   mk("text", { x: x(d0 + 16 * 3600), y: B - 8, "text-anchor": "middle", class: "ax", fill: "var(--steel)" }, svg).textContent = "copia";
+
+  // lectura de un minuto
+  if (has && scrubT != null && scrubT >= Math.max(t0, pv[0][0]) && scrubT <= tEnd) {
+    const p = seriesAt(pv, scrubT), l = seriesAt(load, scrubT), sx = x(scrubT);
+    mk("line", { x1: sx, x2: sx, y1: T, y2: B, stroke: "var(--fg)", "stroke-width": 1 }, svg);
+    mk("circle", { cx: sx, cy: y(p), r: 4.5, fill: "var(--sun)", stroke: "var(--panel)", "stroke-width": 2 }, svg);
+    if (l > p) mk("circle", { cx: sx, cy: y(p - l), r: 4.5, fill: "var(--grid-in)", stroke: "var(--panel)", "stroke-width": 2 }, svg);
+    const rows = [["Producción", p], ["Consumo", l], p >= l ? ["Vertido", p - l] : ["Comprado", l - p]];
+    const bw = 196, bh = 30 + rows.length * 20, bx = sx + 14 + bw > R ? sx - 14 - bw : sx + 14, by = T + 4;
+    mk("rect", { x: bx, y: by, width: bw, height: bh, rx: 8, class: "tip-bg" }, svg);
+    mk("text", { x: bx + 12, y: by + 20, class: "tip" }, svg).textContent = hm(new Date(scrubT * 1000));
+    rows.forEach(([kk, v], i) => {
+      mk("text", { x: bx + 12, y: by + 42 + i * 20, class: "tip-k" }, svg).textContent = kk;
+      mk("text", { x: bx + bw - 12, y: by + 42 + i * 20, "text-anchor": "end", class: "tip" }, svg).textContent = nf0.format(v) + " W";
+    });
+  }
 }
+
+function scrubAt(ev) {
+  const svg = $("chart"), r = svg.getBoundingClientRect();
+  const vx = (ev.clientX - r.left) / r.width * CH.W;
+  const d0 = midnight().getTime() / 1000, t0 = d0 + 6 * 3600, t1 = d0 + 21 * 3600;
+  scrubT = vx < CH.L || vx > CH.R ? null : t0 + (vx - CH.L) / (CH.R - CH.L) * (t1 - t0);
+  clearTimeout(scrubTimer);
+  // con el dedo no hay «salir»: la lectura se queda unos segundos
+  if (ev.pointerType !== "mouse") scrubTimer = setTimeout(() => { scrubT = null; renderChart(); }, 6000);
+  renderChart();
+}
+$("chart").addEventListener("pointermove", scrubAt);
+$("chart").addEventListener("pointerdown", scrubAt);
+$("chart").addEventListener("pointerleave", ev => { if (ev.pointerType === "mouse") { scrubT = null; renderChart(); } });
 
 function renderSun() {
   const s = states[E.sun]; if (!s) return;

@@ -3,7 +3,7 @@ id: marionuevo-fv-panel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fv-panel/icon.svg
 category: automation
 name: Fotovoltaica
-version: "1.0.0"
+version: "1.0.1"
 tagline: La producción de las placas y el consumo de casa, en directo
 description: >
   Panel de supervisión de la instalación fotovoltaica conectado al websocket de
@@ -26,4 +26,7 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  Primera versión.
+  Franja de estado arriba (vertiendo o comprando, por qué y €/h al momento),
+  cables del flujo con grosor según la potencia y curva del día con signo:
+  el sol encima del cero, la compra debajo y el valor de cada minuto al pasar
+  el ratón o tocar.
