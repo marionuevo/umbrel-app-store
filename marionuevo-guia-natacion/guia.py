@@ -200,7 +200,7 @@ def texto_aviso(cfg, jor, plano, j, actual, cortos, est, previo=False, minutos=N
     h = plano[j]
     estilo = h["prueba"]["nombre"].lower()
     limite = cfg.get("max_silabas_aviso", 40)
-    total = len(jor["pruebas"])
+    total = max(p["n"] for p in jor["pruebas"])  # numeración oficial, aunque falte alguna prueba
     k = j - actual if actual >= 0 else j + 1
     calles = interes(cfg, est, h["serie"])
     dest = cfg.get("destacada", {})

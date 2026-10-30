@@ -217,6 +217,8 @@ const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 const TZ = 'Atlantic/Canary';
 const hm = ms => new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',timeZone:TZ});
 const hms = ms => new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:TZ});
+// Número de la última prueba: la numeración oficial puede saltarse una prueba sin inscritos
+const ultimaP = () => Math.max(...S.pruebas.map(p => p.n));
 const SEXO = {F:'fem.', M:'masc.'};
 const ORD = {hija:0, club:1, filtro:2};
 const BELL = '<svg class="bell" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a4.5 4.5 0 0 0-4.5 4.5v3L2 11v1h12v-1l-1.5-2V6A4.5 4.5 0 0 0 8 1.5zM6.2 13.2a1.8 1.8 0 0 0 3.6 0z"/></svg>';
@@ -289,7 +291,7 @@ function renderNow(){
     const fin = c + 1 < total ? S.inicios[c+1] : S.inicios[c] + s.duracion_s * 1000;
     const pct = Math.min(100, Math.max(0, (t - S.inicios[c]) / (fin - S.inicios[c]) * 100));
     html = `<p class="label">Nadando ahora</p>
-      <p class="now-title">Prueba ${p.n} de ${S.pruebas.length} · Serie ${s.n} de ${p.series.length}</p>
+      <p class="now-title">Prueba ${p.n} de ${ultimaP()} · Serie ${s.n} de ${p.series.length}</p>
       <div class="now-meta">${esc(p.nombre)} ${SEXO[p.sexo]} · desde las ${hm(S.inicios[c])}</div>
       <div class="prog"><i style="width:${pct}%;background:var(--now)"></i></div>
       ${lanesHTML(s,'ver')}`;
@@ -359,7 +361,7 @@ function renderTimeline(){
       else run.push(i);
     });
     flush();
-    out += `<section class="event" id="ev${p.n}"><div class="ev-head"><div><h3><span class="p">P${p.n}/${S.pruebas.length}</span>${esc(p.nombre)} ${SEXO[p.sexo]}</h3>${dots?`<div class="dots">${dots}</div>`:''}</div>
+    out += `<section class="event" id="ev${p.n}"><div class="ev-head"><div><h3><span class="p">P${p.n}/${ultimaP()}</span>${esc(p.nombre)} ${SEXO[p.sexo]}</h3>${dots?`<div class="dots">${dots}</div>`:''}</div>
       <span class="t num">${hm(S.inicios[first])}–${hm(fin)}</span></div><div class="ev-body">${body}</div></section>`;
   });
   $('#timeline').innerHTML = out;
