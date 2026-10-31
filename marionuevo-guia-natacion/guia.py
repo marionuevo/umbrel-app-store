@@ -62,6 +62,8 @@ def _apellidos(ap):
 def nombres_cortos(todos):
     """{nombre completo: «Nombre Apellido»}; si dos coinciden, se añade el segundo apellido."""
     def corto(full, con_segundo=False):
+        if ", " not in full:  # relevos: «Relevo», sin apellidos
+            return full
         ap, _, nom = full.partition(", ")
         u = _apellidos(ap)
         primero = u[:-1] if len(u) > 2 else u[:1]

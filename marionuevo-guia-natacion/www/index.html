@@ -219,7 +219,7 @@ const hm = ms => new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:
 const hms = ms => new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:TZ});
 // Número de la última prueba: la numeración oficial puede saltarse una prueba sin inscritos
 const ultimaP = () => Math.max(...S.pruebas.map(p => p.n));
-const SEXO = {F:'fem.', M:'masc.'};
+const SEXO = {F:'fem.', M:'masc.', X:'mixto'};
 const ORD = {hija:0, club:1, filtro:2};
 const BELL = '<svg class="bell" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a4.5 4.5 0 0 0-4.5 4.5v3L2 11v1h12v-1l-1.5-2V6A4.5 4.5 0 0 0 8 1.5zM6.2 13.2a1.8 1.8 0 0 0 3.6 0z"/></svg>';
 
@@ -330,7 +330,7 @@ function heatHTML(i, c){
     ${lanesHTML(s,'ver')}${names}</button>`;
   if (open.has(i)) {
     h += `<div class="detail"><table>${Object.entries(s.calles).map(([cl,x]) =>
-      `<tr><td>${cl}</td><td>${esc(S.cortos[x.nombre])} <span class="club">· ${x.año} · ${esc(clubAlias(x.club))}</span></td><td class="m">${esc(x.marca)}</td></tr>`).join('')}</table>
+      `<tr><td>${cl}</td><td>${esc(S.cortos[x.nombre])} <span class="club">${x.año ? `· ${x.año} ` : ""}· ${esc(clubAlias(x.club))}</span></td><td class="m">${esc(x.marca)}</td></tr>`).join('')}</table>
       ${i !== c ? `<button class="btn primary block" data-anchor="${i}">Esta serie está nadando ahora</button>` : ''}</div>`;
   }
   return h;
@@ -399,7 +399,7 @@ function searchList(para, q){
   const seen = new Map();
   flat.forEach(f => Object.values(f.s.calles).forEach(x => { if (norm(x.nombre).includes(norm(q)) && !seen.has(x.nombre)) seen.set(x.nombre, x); }));
   $(`#${pre}-res`).innerHTML = [...seen.values()].slice(0, 8).map(x =>
-    `<button data-para="${para}" data-add="${esc(x.nombre)}">${esc(S.cortos[x.nombre])} <small>· ${x.año} · ${esc(clubAlias(x.club))}</small></button>`).join('') || '<p class="hint" style="margin:0">Nadie con ese nombre.</p>';
+    `<button data-para="${para}" data-add="${esc(x.nombre)}">${esc(S.cortos[x.nombre])} <small>${x.año ? `· ${x.año} ` : ""}· ${esc(clubAlias(x.club))}</small></button>`).join('') || '<p class="hint" style="margin:0">Nadie con ese nombre.</p>';
 }
 
 function scrollToCurrent(smooth=true){

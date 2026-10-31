@@ -3,7 +3,7 @@ id: marionuevo-guia-natacion
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-guia-natacion/icon.svg
 category: automation
 name: Guía de jornada
-version: "1.0.6"
+version: "1.0.7"
 tagline: Línea de tiempo de una competición de natación con avisos por audio
 description: >
   Línea de tiempo en directo de una jornada de natación: qué serie nada ahora,
@@ -27,4 +27,4 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  «Prueba N de M» usa la numeración oficial aunque falte una prueba sin inscritos.
+  Relevos (equipos sin año) y pruebas mixtas; «Prueba N de M» con la numeración oficial.
