@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Fotovoltaica en vivo</title>
+<title>Solar Live</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Varela+Round&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -141,6 +141,17 @@ button.link:hover, button.link:focus-visible { color: var(--fg); }
 .legend span { display: inline-flex; align-items: center; gap: 7px; }
 .sw { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
 
+/* saldo neto: lo que factura la distribuidora, con el mismo eje de tiempo que la curva */
+.net-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; border-top: 1px solid var(--line); padding-top: 14px; margin-top: 4px; }
+.net-head h3 { font-weight: 400; font-size: 1rem; margin: 0; }
+.net-note { color: var(--muted); font-size: .85rem; flex: 1 1 280px; }
+.net-note b { font-weight: 400; color: var(--fg); font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; font-size: .8rem; background: none; border: 0; color: var(--muted); padding: 6px 12px; min-height: 32px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--line); color: var(--fg); }
+.seg button:focus-visible { outline: 2px solid var(--steel); outline-offset: -2px; }
+
 /* sol */
 .sunc svg { width: 100%; height: auto; display: block; }
 .kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -187,27 +198,27 @@ dialog input:focus-visible, .btn:focus-visible { outline: 2px solid var(--steel)
 <body>
 <div class="app">
   <header class="top">
-    <h1>Fotovoltaica en vivo</h1>
+    <h1>Solar live</h1>
     <div class="meta">
-      <span class="live" id="live"><i></i><span id="live-text">Conectando con Home Assistant…</span></span>
+      <span class="live" id="live"><i></i><span id="live-text">Connecting to Home Assistant…</span></span>
       <span class="num" id="clock">--:--</span>
-      <button class="link" id="theme" type="button">Oscuro</button>
-      <button class="link" id="open-config" type="button">Conexión</button>
+      <button class="link" id="theme" type="button">Dark</button>
+      <button class="link" id="open-config" type="button">Connection</button>
     </div>
   </header>
 
   <div class="grid">
     <!-- Estado de un vistazo -->
-    <section class="card state" id="state" aria-label="Estado ahora">
-      <div class="head" id="st-head">Esperando datos…</div>
+    <section class="card state" id="state" aria-label="Current status">
+      <div class="head" id="st-head">Waiting for data…</div>
       <div class="why" id="st-why"></div>
       <div class="rate"><span class="label" id="st-rate-k"></span><span class="v" id="st-rate"></span></div>
     </section>
 
     <!-- Diagrama de flujos -->
     <section class="card flow" aria-labelledby="h-flow">
-      <h2 id="h-flow"><span>Ahora mismo</span><span class="label" id="flow-note">placas → casa → red</span></h2>
-      <svg viewBox="0 0 640 380" role="img" aria-label="Flujo de energía entre las placas, la casa y la red">
+      <h2 id="h-flow"><span>Right now</span><span class="label" id="flow-note">panels → home → grid</span></h2>
+      <svg viewBox="0 0 640 380" role="img" aria-label="Energy flow between the panels, the home and the grid">
         <path id="w-pv-home" class="wire" d="M150 110 C 300 110, 340 190, 470 190"/>
         <path id="w-pv-grid" class="wire" d="M150 110 C 170 230, 230 300, 300 312"/>
         <path id="w-grid-home" class="wire" d="M340 312 C 420 300, 470 260, 470 230"/>
@@ -226,7 +237,7 @@ dialog input:focus-visible, .btn:focus-visible { outline: 2px solid var(--steel)
           </g>
           <text class="node-val" id="v-pv" y="10" text-anchor="middle">–</text>
           <text class="node-unit" y="30" text-anchor="middle">W</text>
-          <text class="node-name" y="88" text-anchor="middle">Placas</text>
+          <text class="node-name" y="88" text-anchor="middle">Panels</text>
         </g>
         <!-- casa -->
         <g transform="translate(510 190)">
@@ -236,7 +247,7 @@ dialog input:focus-visible, .btn:focus-visible { outline: 2px solid var(--steel)
           </g>
           <text class="node-val" id="v-load" y="10" text-anchor="middle">–</text>
           <text class="node-unit" y="30" text-anchor="middle">W</text>
-          <text class="node-name" y="88" text-anchor="middle">Casa</text>
+          <text class="node-name" y="88" text-anchor="middle">Home</text>
           <text class="nas-badge" id="nas-badge" y="108" text-anchor="middle"></text>
         </g>
         <!-- red -->
@@ -247,96 +258,112 @@ dialog input:focus-visible, .btn:focus-visible { outline: 2px solid var(--steel)
           </g>
           <text class="node-val" id="v-grid" y="8" text-anchor="middle" style="font-size:20px">–</text>
           <text class="node-unit" id="u-grid" y="25" text-anchor="middle">W</text>
-          <text class="node-name" id="n-grid" y="66" text-anchor="middle">Red</text>
+          <text class="node-name" id="n-grid" y="66" text-anchor="middle">Grid</text>
         </g>
       </svg>
     </section>
 
     <!-- Cifras -->
-    <section class="card figures" aria-label="Cifras principales">
+    <section class="card figures" aria-label="Key figures">
       <div class="hero">
-        <span class="label">Producción</span>
+        <span class="label">Production</span>
         <div class="big" id="big-pv">–<small>W</small></div>
         <div class="meter" aria-hidden="true"><i id="meter-pv"></i></div>
-        <div class="meter-scale num"><span>0</span><span>inversor 3.000 W</span></div>
+        <div class="meter-scale num"><span>0</span><span>inverter 3,000 W</span></div>
         <div class="clip" id="clip"></div>
       </div>
       <div class="ring">
         <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="bg" cx="32" cy="32" r="26"/><circle class="fg" id="ring-aut" cx="32" cy="32" r="26" stroke="var(--grid-out)" stroke-dasharray="163.4" stroke-dashoffset="163.4"/></svg>
-        <div class="stat"><span class="label">Autonomía</span><span class="v" id="aut">–</span><span class="s">de la casa sale del sol</span></div>
+        <div class="stat"><span class="label">Autonomy</span><span class="v" id="aut">–</span><span class="s">of the home runs on sun</span></div>
       </div>
       <div class="ring">
         <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="bg" cx="32" cy="32" r="26"/><circle class="fg" id="ring-self" cx="32" cy="32" r="26" stroke="var(--sun)" stroke-dasharray="163.4" stroke-dashoffset="163.4"/></svg>
-        <div class="stat"><span class="label">Autoconsumo</span><span class="v" id="self">–</span><span class="s">del sol se usa en casa</span></div>
+        <div class="stat"><span class="label">Self-consumption</span><span class="v" id="self">–</span><span class="s">of the sun is used at home</span></div>
       </div>
-      <div class="stat"><span class="label" id="grid-label">Red</span><span class="v" id="grid-big">–</span><span class="s" id="grid-sub"></span></div>
-      <div class="stat"><span class="label">Hoy generado</span><span class="v" id="eday">–</span><span class="s" id="eday-sub"></span></div>
+      <div class="stat"><span class="label" id="grid-label">Grid</span><span class="v" id="grid-big">–</span><span class="s" id="grid-sub"></span></div>
+      <div class="stat"><span class="label">Generated today</span><span class="v" id="eday">–</span><span class="s" id="eday-sub"></span></div>
     </section>
 
     <!-- Curva del día -->
     <section class="card day" aria-labelledby="h-day">
-      <h2 id="h-day"><span>Hoy</span><span class="label" id="day-note"></span></h2>
-      <div class="chart-wrap"><svg id="chart" viewBox="0 0 1200 340" role="img" aria-label="Producción y consumo de hoy: arriba lo que da el sol, abajo lo que se compra"></svg></div>
+      <h2 id="h-day"><span>Today</span><span class="label" id="day-note"></span></h2>
+      <div class="chart-wrap"><svg id="chart" viewBox="0 0 1200 340" role="img" aria-label="Today's production and consumption: solar above zero, grid imports below"></svg></div>
       <div class="legend">
-        <span><i class="sw" style="background:transparent;border-top:2px solid var(--sun)"></i>Producción</span>
-        <span><i class="sw" style="background:var(--sun-dim)"></i>Sol usado en casa</span>
-        <span><i class="sw" style="background:var(--out-band)"></i>Excedente vertido</span>
-        <span><i class="sw" style="background:var(--in-band)"></i>Comprado a la red (bajo el cero)</span>
-        <span><i class="sw" style="background:var(--steel-dim);outline:1px solid var(--steel);outline-offset:-1px"></i>Ventana de la copia del TrueNAS</span>
+        <span><i class="sw" style="background:transparent;border-top:2px solid var(--sun)"></i>Production</span>
+        <span><i class="sw" style="background:var(--sun-dim)"></i>Solar used at home</span>
+        <span><i class="sw" style="background:var(--out-band)"></i>Exported surplus</span>
+        <span><i class="sw" style="background:var(--in-band)"></i>Imported from the grid (below zero)</span>
+        <span><i class="sw" style="background:var(--steel-dim);outline:1px solid var(--steel);outline-offset:-1px"></i>TrueNAS backup window</span>
+      </div>
+
+      <div class="net-head">
+        <h3>Net balance</h3>
+        <div class="seg" role="group" aria-label="Netting interval">
+          <button type="button" data-net="60" aria-pressed="true">1 h · billing</button>
+          <button type="button" data-net="15" aria-pressed="false">15 min · simulated</button>
+        </div>
+        <div class="net-note" id="net-note"></div>
+      </div>
+      <div class="chart-wrap"><svg id="netchart" viewBox="0 0 1200 172" role="img" aria-label="Net grid balance per interval: net export above zero, net import below"></svg></div>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--grid-out)"></i>Net export</span>
+        <span><i class="sw" style="background:var(--grid-in)"></i>Net import</span>
+        <span><i class="sw" style="background:var(--out-band)"></i><i class="sw" style="background:var(--in-band);margin-left:-5px"></i>Metered flow, offset within the interval</span>
+        <span><i class="sw" style="background:transparent;outline:1.5px solid var(--muted);outline-offset:-1.5px"></i>Interval still open</span>
       </div>
     </section>
 
     <!-- Sol -->
     <section class="card sunc" aria-labelledby="h-sun">
-      <h2 id="h-sun"><span>El sol</span><span class="label">placas al oeste · 270°</span></h2>
-      <svg id="sunarc" viewBox="0 0 360 170" role="img" aria-label="Recorrido del sol hoy"></svg>
+      <h2 id="h-sun"><span>The sun</span><span class="label">panels facing west · 270°</span></h2>
+      <svg id="sunarc" viewBox="0 0 360 170" role="img" aria-label="The sun's path today"></svg>
       <div class="kv">
-        <div><span class="label">Altura</span><span class="v" id="sun-el">–</span></div>
-        <div><span class="label">Acimut</span><span class="v" id="sun-az">–</span></div>
-        <div><span class="label">Luz</span><span class="v" id="sun-len">–</span></div>
+        <div><span class="label">Elevation</span><span class="v" id="sun-el">–</span></div>
+        <div><span class="label">Azimuth</span><span class="v" id="sun-az">–</span></div>
+        <div><span class="label">Daylight</span><span class="v" id="sun-len">–</span></div>
       </div>
     </section>
 
     <!-- Inversor -->
     <section class="card inv" aria-labelledby="h-inv">
-      <h2 id="h-inv"><span>Inversor Fronius Primo 3.0</span><span class="status" id="inv-status"><i></i><span>–</span></span></h2>
+      <h2 id="h-inv"><span>Fronius Primo 3.0 inverter</span><span class="status" id="inv-status"><i></i><span>–</span></span></h2>
       <div class="rows">
-        <div><span class="label">Tensión DC</span><span class="v" id="dcv">–</span></div>
-        <div><span class="label">Corriente DC</span><span class="v" id="dca">–</span></div>
-        <div><span class="label">Tensión AC</span><span class="v" id="acv">–</span></div>
-        <div><span class="label">Corriente AC</span><span class="v" id="aca">–</span></div>
-        <div><span class="label">Frecuencia</span><span class="v" id="freq">–</span></div>
-        <div><span class="label">Factor de potencia</span><span class="v" id="pf">–</span></div>
+        <div><span class="label">DC voltage</span><span class="v" id="dcv">–</span></div>
+        <div><span class="label">DC current</span><span class="v" id="dca">–</span></div>
+        <div><span class="label">AC voltage</span><span class="v" id="acv">–</span></div>
+        <div><span class="label">AC current</span><span class="v" id="aca">–</span></div>
+        <div><span class="label">Frequency</span><span class="v" id="freq">–</span></div>
+        <div><span class="label">Power factor</span><span class="v" id="pf">–</span></div>
       </div>
     </section>
 
     <!-- Balance -->
     <section class="card tally" aria-labelledby="h-tally">
-      <h2 id="h-tally"><span>Balance de hoy</span><span class="label" id="tally-note"></span></h2>
+      <h2 id="h-tally"><span>Today's balance</span><span class="label" id="tally-note"></span></h2>
       <div class="bar" aria-hidden="true"><i id="b-self" style="background:var(--sun)"></i><i id="b-exp" style="background:var(--grid-out)"></i><i id="b-imp" style="background:var(--grid-in)"></i></div>
       <div class="rows">
-        <div><span class="label">Autoconsumido</span><span class="v" id="t-self">–</span></div>
-        <div><span class="label">Vertido</span><span class="v" id="t-exp">–</span></div>
-        <div><span class="label">Comprado</span><span class="v" id="t-imp">–</span></div>
-        <div><span class="label">Consumo total</span><span class="v" id="t-load">–</span></div>
+        <div><span class="label">Self-consumed</span><span class="v" id="t-self">–</span></div>
+        <div><span class="label">Exported</span><span class="v" id="t-exp">–</span></div>
+        <div><span class="label">Imported</span><span class="v" id="t-imp">–</span></div>
+        <div><span class="label">Total consumption</span><span class="v" id="t-load">–</span></div>
       </div>
-      <div class="save"><span class="label">Ahorro de hoy</span><span class="v" id="t-save">–</span></div>
+      <div class="save"><span class="label">Saved today</span><span class="v" id="t-save">–</span></div>
     </section>
   </div>
 </div>
 
 <dialog id="config">
   <form method="dialog" id="config-form">
-    <h2>Conexión con Home Assistant</h2>
-    <p>El token se guarda solo en este navegador. Créalo en tu perfil de Home Assistant, en «Tokens de acceso de larga duración».</p>
-    <label for="cfg-url">Dirección de Home Assistant
+    <h2>Home Assistant connection</h2>
+    <p>The token is stored only in this browser. Create it in your Home Assistant profile, under “Long-lived access tokens”.</p>
+    <label for="cfg-url">Home Assistant address
       <input id="cfg-url" name="url" type="url" required placeholder="http://umbrel.local:8123" autocomplete="off">
     </label>
-    <label for="cfg-token">Token de acceso
+    <label for="cfg-token">Access token
       <input id="cfg-token" name="token" type="password" required autocomplete="off" spellcheck="false">
     </label>
     <div class="err" id="cfg-err"></div>
-    <button class="btn" type="submit">Conectar</button>
+    <button class="btn" type="submit">Connect</button>
   </form>
 </dialog>
 
@@ -372,15 +399,17 @@ const INVERTER_W = 3000;
 const STORE = "fv-panel-conexion";
 
 const $ = id => document.getElementById(id);
-const nf0 = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 });
-const nf1 = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const nf2 = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const eur = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
-const hm = d => d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+const nf0 = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const nf2 = new Intl.NumberFormat("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const eur = new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" });
+const hm = d => d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
 const states = {};                 // entity_id -> {s, a}
 const series = { pv: [], load: [] };  // [epoch s, W]
 let todayImpWh = null, todayExpWh = null;
+let statRows = [];                 // [inicio s, Wh comprados, Wh vertidos] cada 5 min desde medianoche
+let statEnd = null;                // lecturas de los contadores al cerrar la última estadística
 
 const num = id => { const v = parseFloat(states[E[id]]?.s); return Number.isFinite(v) ? v : null; };
 const kwh = wh => wh == null ? "–" : nf1.format(wh / 1000) + " kWh";
@@ -438,30 +467,30 @@ function call(msg) {
 let cfgNow = null;
 function connect() {
   const cfg = cfgNow = (cfgNow?.hass ? cfgNow : loadConfig());
-  if (!cfg) { setLive("off", "Sin configurar"); openConfig(); return; }
+  if (!cfg) { setLive("off", "Not configured"); openConfig(); return; }
   try { ws && ws.close(); } catch (e) {}
   const url = cfg.url.replace(/^http/, "ws") + "/api/websocket";
-  setLive("", "Conectando con Home Assistant…");
+  setLive("", "Connecting to Home Assistant…");
   ws = new WebSocket(url);
   ws.onmessage = async ev => {
     const m = JSON.parse(ev.data);
     if (m.type === "auth_required") {
       const token = cfg.hass ? await hassAccessToken() : cfg.token;
-      if (!token) { setLive("off", "Sesión de Home Assistant caducada"); retry = 0; openConfig("Vuelve a entrar en Home Assistant en este navegador o pega un token."); ws.close(); return; }
+      if (!token) { setLive("off", "Home Assistant session expired"); retry = 0; openConfig("Sign in to Home Assistant again in this browser, or paste a token."); ws.close(); return; }
       ws.send(JSON.stringify({ type: "auth", access_token: token }));
     }
     else if (m.type === "auth_invalid") {
       if (cfg.hass && !cfg.retried) { cfg.retried = true; await hassAccessToken(true); ws.close(); return; }   // renueva y reconecta
-      setLive("off", "Token rechazado"); retry = 0; openConfig("Home Assistant ha rechazado el token. Pega uno nuevo."); ws.close();
+      setLive("off", "Token rejected"); retry = 0; openConfig("Home Assistant rejected the token. Paste a new one."); ws.close();
     }
-    else if (m.type === "auth_ok") { retry = 1000; cfg.retried = false; setLive("on", "En directo"); start(); }
+    else if (m.type === "auth_ok") { retry = 1000; cfg.retried = false; setLive("on", "Live"); start(); }
     else if (m.type === "result" && pending[m.id]) { const p = pending[m.id]; delete pending[m.id]; m.success ? p.res(m.result) : p.rej(m.error); }
     else if (m.type === "event" && m.id === subId) onEntities(m.event);
   };
   ws.onclose = () => {
-    clearInterval(statsTimer);
+    clearTimeout(statsTimer);
     if (!retry) return;
-    setLive("off", "Sin conexión · reintentando");
+    setLive("off", "Offline · retrying");
     setTimeout(connect, retry); retry = Math.min(retry * 2, 30000);
   };
 }
@@ -469,11 +498,17 @@ function connect() {
 let subId = null;
 async function start() {
   subId = msgId + 1;
-  call({ type: "subscribe_entities", entity_ids: Object.values(E) }).catch(() => {});
+  call({ type: "subscribe_entities", entity_ids: [...Object.values(E), IMP, EXP] }).catch(() => {});
   await loadHistory();
   await loadTodayStats();
-  clearInterval(statsTimer);
-  statsTimer = setInterval(loadTodayStats, 5 * 60 * 1000);
+  scheduleStats();
+}
+
+// HA cierra las estadísticas cada 5 min: pedirlas justo después deja la cola en vivo muy corta
+function scheduleStats() {
+  clearTimeout(statsTimer);
+  const wait = 300000 - Date.now() % 300000 + 20000;
+  statsTimer = setTimeout(async () => { await loadTodayStats(); scheduleStats(); }, wait);
 }
 
 function onEntities(ev) {
@@ -501,6 +536,30 @@ function pushPoint(k, t, v) {
 
 function midnight() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
 
+/* Saldo neto. El RD 244/2019 define lo comprado y lo vertido como saldo neto horario: dentro de
+   cada hora se resta uno de otro y solo se factura la diferencia. El contador de red acumula los
+   dos sentidos por separado, así que basta con agrupar sus estadísticas de 5 min. Las horas se
+   cortan en punto sobre el tiempo epoch, válido en Canarias (desfase de horas enteras). */
+function liveTail() {   // lo acumulado por los contadores desde la última estadística
+  const i = parseFloat(states[IMP]?.s), e = parseFloat(states[EXP]?.s);
+  if (!statEnd || !Number.isFinite(i) || !Number.isFinite(e)) return null;
+  return [Math.max(0, i - statEnd.imp), Math.max(0, e - statEnd.exp)];
+}
+function netSlots(mins, live = true) {
+  const size = mins * 60, now = Date.now() / 1000, slots = new Map();
+  const add = (t, imp, exp) => {
+    const start = Math.floor(t / size) * size, s = slots.get(start) || { t: start, imp: 0, exp: 0 };
+    s.imp += imp; s.exp += exp; slots.set(start, s);
+  };
+  for (const [t, imp, exp] of statRows) add(t, imp, exp);
+  const tail = live ? liveTail() : null;
+  if (tail) add(now, tail[0], tail[1]);
+  return [...slots.values()].sort((a, b) => a.t - b.t).map(s => ({ ...s, open: s.t + size > now }));
+}
+const billed = slots => slots.reduce((a, s) => ({
+  imp: a.imp + Math.max(0, s.imp - s.exp), exp: a.exp + Math.max(0, s.exp - s.imp), offset: a.offset + Math.min(s.imp, s.exp),
+}), { imp: 0, exp: 0, offset: 0 });
+
 async function loadHistory() {
   const r = await call({ type: "history/history_during_period", start_time: midnight().toISOString(),
     entity_ids: [E.pv, E.load], minimal_response: true, no_attributes: true, significant_changes_only: false });
@@ -517,9 +576,16 @@ async function loadHistory() {
 async function loadTodayStats() {
   try {
     const r = await call({ type: "recorder/statistics_during_period", start_time: midnight().toISOString(),
-      statistic_ids: [IMP, EXP], period: "5minute", types: ["change"] });
-    const sum = id => (r[id] || []).reduce((a, p) => a + (p.change || 0), 0);
-    todayImpWh = sum(IMP); todayExpWh = sum(EXP);
+      statistic_ids: [IMP, EXP], period: "5minute", types: ["change", "state"] });
+    const imp = r[IMP] || [], exp = r[EXP] || [];
+    const rows = new Map();
+    for (const p of imp) rows.set(p.start, [p.start / 1000, p.change || 0, 0]);
+    for (const p of exp) { const row = rows.get(p.start) || [p.start / 1000, 0, 0]; row[2] = p.change || 0; rows.set(p.start, row); }
+    statRows = [...rows.values()].sort((a, b) => a[0] - b[0]);
+    const lastImp = imp[imp.length - 1], lastExp = exp[exp.length - 1];
+    statEnd = lastImp && lastExp && lastImp.state != null && lastExp.state != null ? { imp: lastImp.state, exp: lastExp.state } : null;
+    todayImpWh = statRows.reduce((a, row) => a + row[1], 0);
+    todayExpWh = statRows.reduce((a, row) => a + row[2], 0);
     render();
   } catch (e) { /* sin estadísticas: el balance queda en guiones */ }
 }
@@ -543,20 +609,20 @@ function renderState(pv, load, grid, pvHome, exp, imp) {
   const timp = num("timp"), texp = num("texp");
   const W = v => `<span class="num">${nf0.format(v)}</span> W`;
   let tone = "", rateK = "", rate = "";
-  if (pv == null || load == null || grid == null) { head.textContent = "Esperando datos…"; why.textContent = ""; }
+  if (pv == null || load == null || grid == null) { head.textContent = "Waiting for data…"; why.textContent = ""; }
   else if (grid < -5) {
-    tone = "out"; head.innerHTML = "Vertiendo " + W(exp);
-    why.textContent = `El sol cubre toda la casa (${nf0.format(load)} W) y sobra.`;
-    if (texp != null) { rateK = "se compensa a"; rate = eur.format(exp / 1000 * texp) + "/h"; }
+    tone = "out"; head.innerHTML = "Exporting " + W(exp);
+    why.textContent = `The sun covers the whole home (${nf0.format(load)} W) with some to spare.`;
+    if (texp != null) { rateK = "credited at"; rate = eur.format(exp / 1000 * texp) + "/h"; }
   } else if (grid > 5) {
-    tone = "in"; head.innerHTML = "Comprando " + W(imp);
+    tone = "in"; head.innerHTML = "Importing " + W(imp);
     const pct = load > 0 ? Math.round(pvHome / load * 100) : 0;
-    why.textContent = pv > 15 && pct > 0 ? `El sol cubre el ${pct} % de la casa; el resto viene de la red.`
-      : (states[E.sun]?.s === "below_horizon" ? "De noche: toda la casa tira de la red." : "Sin producción: toda la casa tira de la red.");
-    if (timp != null) { rateK = "cuesta"; rate = eur.format(imp / 1000 * timp) + "/h"; }
+    why.textContent = pv > 15 && pct > 0 ? `The sun covers ${pct}% of the home; the rest comes from the grid.`
+      : (states[E.sun]?.s === "below_horizon" ? "Night time: the whole home runs on the grid." : "No production: the whole home runs on the grid.");
+    if (timp != null) { rateK = "costing"; rate = eur.format(imp / 1000 * timp) + "/h"; }
   } else {
-    tone = "even"; head.textContent = "En equilibrio";
-    why.textContent = "Las placas dan justo lo que gasta la casa.";
+    tone = "even"; head.textContent = "Balanced";
+    why.textContent = "The panels are producing exactly what the home is using.";
   }
   el.className = "card state " + tone;
   $("st-rate-k").textContent = rateK; $("st-rate").textContent = rate;
@@ -571,7 +637,7 @@ function render() {
   $("v-pv").textContent = pv == null ? "–" : nf0.format(pv);
   $("v-load").textContent = load == null ? "–" : nf0.format(load);
   $("v-grid").textContent = grid == null ? "–" : nf0.format(Math.abs(grid));
-  $("n-grid").textContent = grid < -5 ? "Red · vertiendo" : grid > 5 ? "Red · comprando" : "Red";
+  $("n-grid").textContent = grid < -5 ? "Grid · exporting" : grid > 5 ? "Grid · importing" : "Grid";
   const gc = grid < -5 ? "var(--grid-out)" : grid > 5 ? "var(--grid-in)" : "var(--muted)";
   $("ring-grid").style.stroke = gc; $("ico-grid").setAttribute("stroke", gc);
 
@@ -582,28 +648,28 @@ function render() {
 
   const nasOn = states[E.nas]?.s === "on";
   const copia = states[E.copia]?.s === "on", mant = states[E.mant]?.s === "on";
-  $("nas-badge").textContent = mant ? "TrueNAS · mantenimiento" : copia ? "TrueNAS · copia solar" : nasOn ? "TrueNAS encendido" : "";
+  $("nas-badge").textContent = mant ? "TrueNAS · maintenance" : copia ? "TrueNAS · solar backup" : nasOn ? "TrueNAS on" : "";
 
   $("big-pv").innerHTML = (pv == null ? "–" : nf0.format(pv)) + "<small>W</small>";
   $("meter-pv").style.width = pv == null ? "0" : Math.min(100, pv / INVERTER_W * 100) + "%";
   const acp = num("acp");
-  $("clip").textContent = acp != null && acp >= INVERTER_W * 0.97 ? "El inversor está al máximo: recorta lo que sobra de las placas." : "";
+  $("clip").textContent = acp != null && acp >= INVERTER_W * 0.97 ? "The inverter is at its limit: excess panel output is being clipped." : "";
 
   const aut = num("aut"), self = num("self");
-  $("aut").textContent = aut == null ? "–" : nf0.format(aut) + " %";
-  $("self").textContent = self == null ? "–" : nf0.format(self) + " %";
+  $("aut").textContent = aut == null ? "–" : nf0.format(aut) + "%";
+  $("self").textContent = self == null ? "–" : nf0.format(self) + "%";
   $("ring-aut").style.strokeDashoffset = 163.4 * (1 - Math.min(100, aut || 0) / 100);
   $("ring-self").style.strokeDashoffset = 163.4 * (1 - Math.min(100, self || 0) / 100);
 
-  $("grid-label").textContent = grid < -5 ? "Vertiendo a la red" : grid > 5 ? "Comprando a la red" : "Red";
+  $("grid-label").textContent = grid < -5 ? "Exporting to the grid" : grid > 5 ? "Importing from the grid" : "Grid";
   $("grid-big").textContent = grid == null ? "–" : nf0.format(Math.abs(grid)) + " W";
   $("grid-big").style.color = gc;
   const timp = num("timp"), texp = num("texp");
-  $("grid-sub").textContent = grid < -5 && texp != null ? `se compensa a ${nf2.format(texp)} €/kWh` : grid > 5 && timp != null ? `a ${nf2.format(timp)} €/kWh` : "equilibrio";
+  $("grid-sub").textContent = grid < -5 && texp != null ? `credited at ${eur.format(texp)}/kWh` : grid > 5 && timp != null ? `at ${eur.format(timp)}/kWh` : "balanced";
 
   const eday = num("eday");
   $("eday").textContent = kwh(eday);
-  $("eday-sub").textContent = eday != null && pv != null ? "producción del inversor" : "";
+  $("eday-sub").textContent = eday != null && pv != null ? "inverter output" : "";
 
   renderInverter();
   renderTally(eday, timp, texp);
@@ -618,7 +684,7 @@ function renderInverter() {
   $("freq").textContent = f("freq", "Hz", nf2);
   const pf = num("pf"); $("pf").textContent = pf == null ? "–" : nf2.format(pf);
   const st = states[E.status]?.s || "–";
-  const words = { running: "Produciendo", startup: "Arrancando", standby: "En espera", sleeping: "Dormido", error: "Error" };
+  const words = { running: "Producing", startup: "Starting up", standby: "Standby", sleeping: "Sleeping", error: "Error" };
   const el = $("inv-status");
   el.className = "status " + (st === "running" ? "ok" : /error|fault/i.test(st) ? "warn" : "");
   el.lastElementChild.textContent = words[st] || st.replace(/_/g, " ");
@@ -634,8 +700,10 @@ function renderTally(edayWh, timp, texp) {
   $("b-self").style.width = selfWh / total * 100 + "%";
   $("b-exp").style.width = todayExpWh / total * 100 + "%";
   $("b-imp").style.width = todayImpWh / total * 100 + "%";
-  if (timp != null && texp != null) $("t-save").textContent = eur.format(selfWh / 1000 * timp + todayExpWh / 1000 * texp);
-  $("tally-note").textContent = "desde las 00:00";
+  // lo compensado dentro de la hora evita compra a cambio de no cobrar ese vertido
+  const offset = billed(netSlots(60, false)).offset;
+  if (timp != null && texp != null) $("t-save").textContent = eur.format((selfWh + offset) / 1000 * timp + (todayExpWh - offset) / 1000 * texp);
+  $("tally-note").textContent = "since 00:00 · hourly net";
 }
 
 /* curva del día: eje de 06:00 a 21:00. Con signo, como Tesla u Homey: encima del cero lo que da
@@ -677,7 +745,7 @@ function renderChart() {
   }
   for (let h = 6; h <= 21; h += 1) {
     const tx = x(d0 + h * 3600);
-    mk("text", { x: tx, y: B + 20, "text-anchor": "middle", class: "ax" }, svg).textContent = h % 3 === 0 ? h + ":00" : "";
+    mk("text", { x: tx, y: B + 20, "text-anchor": h === 21 ? "end" : "middle", class: "ax" }, svg).textContent = h % 3 === 0 ? h + ":00" : "";
     if (h % 3 === 0) mk("line", { x1: tx, x2: tx, y1: B, y2: B + 5, class: "gl" }, svg);
   }
 
@@ -694,18 +762,18 @@ function renderChart() {
     mk("path", { d: "M" + pv.map(([t, v]) => x(t).toFixed(1) + " " + y(v).toFixed(1)).join(" L"), fill: "none", stroke: "var(--sun)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
     const peak = pv.reduce((a, b) => b[1] > a[1] ? b : a);
     mk("circle", { cx: x(peak[0]), cy: y(peak[1]), r: 4, fill: "var(--sun)" }, svg);
-    mk("text", { x: x(peak[0]), y: y(peak[1]) - 10, "text-anchor": "middle", class: "ax" }, svg).textContent = "pico " + nf0.format(peak[1]) + " W · " + hm(new Date(peak[0] * 1000));
-    $("day-note").textContent = "media por minuto · actualizado " + hm(new Date());
+    mk("text", { x: x(peak[0]), y: y(peak[1]) - 10, "text-anchor": "middle", class: "ax" }, svg).textContent = "peak " + nf0.format(peak[1]) + " W · " + hm(new Date(peak[0] * 1000));
+    $("day-note").textContent = "per-minute average · updated " + hm(new Date());
   }
   mk("line", { x1: L, x2: R, y1: Y0, y2: Y0, class: "zero" }, svg);
-  mk("text", { x: L - 8, y: Y0 - 12, "text-anchor": "end", class: "ax" }, svg).textContent = "sol ↑";
-  mk("text", { x: L - 8, y: Y0 + 20, "text-anchor": "end", class: "ax" }, svg).textContent = "red ↓";
+  mk("text", { x: L - 8, y: Y0 - 12, "text-anchor": "end", class: "ax" }, svg).textContent = "sun ↑";
+  mk("text", { x: L - 8, y: Y0 + 20, "text-anchor": "end", class: "ax" }, svg).textContent = "grid ↓";
   const now = Date.now() / 1000;
   if (now > t0 && now < t1) {
     mk("line", { x1: x(now), x2: x(now), y1: T, y2: B, stroke: "var(--muted)", "stroke-dasharray": "3 4" }, svg);
-    mk("text", { x: x(now) + 6, y: T + 10, class: "ax" }, svg).textContent = "ahora";
+    mk("text", { x: x(now) + 6, y: T + 10, class: "ax" }, svg).textContent = "now";
   }
-  mk("text", { x: x(d0 + 16 * 3600), y: B - 8, "text-anchor": "middle", class: "ax", fill: "var(--steel)" }, svg).textContent = "copia";
+  mk("text", { x: x(d0 + 16 * 3600), y: B - 8, "text-anchor": "middle", class: "ax", fill: "var(--steel)" }, svg).textContent = "backup";
 
   // lectura de un minuto
   if (has && scrubT != null && scrubT >= Math.max(t0, pv[0][0]) && scrubT <= tEnd) {
@@ -713,7 +781,7 @@ function renderChart() {
     mk("line", { x1: sx, x2: sx, y1: T, y2: B, stroke: "var(--fg)", "stroke-width": 1 }, svg);
     mk("circle", { cx: sx, cy: y(p), r: 4.5, fill: "var(--sun)", stroke: "var(--panel)", "stroke-width": 2 }, svg);
     if (l > p) mk("circle", { cx: sx, cy: y(p - l), r: 4.5, fill: "var(--grid-in)", stroke: "var(--panel)", "stroke-width": 2 }, svg);
-    const rows = [["Producción", p], ["Consumo", l], p >= l ? ["Vertido", p - l] : ["Comprado", l - p]];
+    const rows = [["Production", p], ["Consumption", l], p >= l ? ["Exported", p - l] : ["Imported", l - p]];
     const bw = 196, bh = 30 + rows.length * 20, bx = sx + 14 + bw > R ? sx - 14 - bw : sx + 14, by = T + 4;
     mk("rect", { x: bx, y: by, width: bw, height: bh, rx: 8, class: "tip-bg" }, svg);
     mk("text", { x: bx + 12, y: by + 20, class: "tip" }, svg).textContent = hm(new Date(scrubT * 1000));
@@ -722,10 +790,105 @@ function renderChart() {
       mk("text", { x: bx + bw - 12, y: by + 42 + i * 20, "text-anchor": "end", class: "tip" }, svg).textContent = nf0.format(v) + " W";
     });
   }
+  renderNet();
 }
 
+/* franja de saldo neto, alineada con la curva. Cada intervalo es una columna: lo tenue es lo que
+   ha pasado por el contador en cada sentido; lo sólido, la diferencia, que es lo que se factura. */
+const NET = { H: 172, T: 12, B: 146 };
+const kwhNet = wh => nf2.format(wh / 1000) + " kWh";
+let netMin = 60;
+try { if (localStorage.getItem("fv-panel-neto") === "15") netMin = 15; } catch (e) {}
+
+// columna con la punta redondeada y la base recta sobre el cero
+function columnPath(cx, w, base, tip) {
+  const up = tip < base, r = Math.min(4, w / 2, Math.abs(base - tip)), l = cx - w / 2, rt = cx + w / 2, s = up ? 1 : -1;
+  return `M${l} ${base} V${tip + s * r} Q${l} ${tip} ${l + r} ${tip} H${rt - r} Q${rt} ${tip} ${rt} ${tip + s * r} V${base} Z`;
+}
+
+function renderNet() {
+  const svg = $("netchart"); svg.textContent = "";
+  const { L, R } = CH, { T, B } = NET, size = netMin * 60;
+  const d0 = midnight().getTime() / 1000, t0 = d0 + 6 * 3600, t1 = d0 + 21 * 3600;
+  const x = t => L + (Math.min(Math.max(t, t0), t1) - t0) / (t1 - t0) * (R - L);
+  const slots = netSlots(netMin), shown = slots.filter(s => s.t >= t0 && s.t < t1);
+
+  const unit = netMin === 60 ? 250 : 100;   // Wh
+  const posMax = Math.max(unit, Math.ceil(Math.max(0, ...shown.map(s => s.exp)) / unit) * unit);
+  const negMax = Math.max(unit, Math.ceil(Math.max(0, ...shown.map(s => s.imp)) / unit) * unit);
+  const k = (B - T) / (posMax + negMax), Y0 = T + posMax * k, y = v => Y0 - v * k;
+
+  for (const [v, sign] of [[posMax, "+"], [-negMax, "−"]]) {
+    mk("line", { x1: L, x2: R, y1: y(v), y2: y(v), class: "gl" }, svg);
+    mk("text", { x: L - 8, y: y(v) + (v > 0 ? 9 : -2), "text-anchor": "end", class: "ax" }, svg).textContent = sign + nf2.format(Math.abs(v) / 1000);
+  }
+  mk("text", { x: L - 8, y: Y0 + 4, "text-anchor": "end", class: "ax" }, svg).textContent = "kWh";
+  for (let h = 6; h <= 21; h += 1) {
+    const tx = x(d0 + h * 3600);
+    if (h % 3 === 0) {
+      mk("text", { x: tx, y: B + 20, "text-anchor": h === 21 ? "end" : "middle", class: "ax" }, svg).textContent = h + ":00";
+      mk("line", { x1: tx, x2: tx, y1: B, y2: B + 5, class: "gl" }, svg);
+    }
+  }
+
+  const hover = scrubT == null ? null : shown.find(s => scrubT >= s.t && scrubT < s.t + size);
+  if (hover) mk("rect", { x: x(hover.t), y: T, width: x(hover.t + size) - x(hover.t), height: B - T, fill: "var(--line)", opacity: .55 }, svg);
+
+  const w = Math.min(24, x(t0 + size) - x(t0) - 2);
+  for (const s of shown) {
+    const cx = x(s.t + size / 2), net = s.exp - s.imp, tone = net >= 0 ? "var(--grid-out)" : "var(--grid-in)";
+    if (s.exp >= 1) mk("path", { d: columnPath(cx, w, Y0, y(s.exp)), fill: "var(--out-band)" }, svg);
+    if (s.imp >= 1) mk("path", { d: columnPath(cx, w, Y0, y(-s.imp)), fill: "var(--in-band)" }, svg);
+    if (Math.abs(net) < 1) continue;
+    // el intervalo abierto va hueco: aún puede cambiar de signo
+    mk("path", { d: columnPath(cx, w, Y0, y(net)), ...(s.open ? { fill: "none", stroke: tone, "stroke-width": 1.5 } : { fill: tone }) }, svg);
+  }
+  mk("line", { x1: L, x2: R, y1: Y0, y2: Y0, class: "zero" }, svg);
+
+  if (hover) {
+    const net = hover.exp - hover.imp, sx = x(hover.t + size / 2);
+    const rows = [["Imported", hover.imp], ["Exported", hover.exp], [net >= 0 ? "Net export" : "Net import", Math.abs(net)]];
+    const bw = 214, bh = 30 + rows.length * 20, bx = sx + 20 + bw > R ? sx - 20 - bw : sx + 20, by = Math.max(0, (T + B - bh) / 2);
+    mk("rect", { x: bx, y: by, width: bw, height: bh, rx: 8, class: "tip-bg" }, svg);
+    mk("text", { x: bx + 12, y: by + 20, class: "tip" }, svg).textContent = hm(new Date(hover.t * 1000)) + "–" + hm(new Date((hover.t + size) * 1000)) + (hover.open ? " · open" : "");
+    rows.forEach(([key, v], i) => {
+      mk("text", { x: bx + 12, y: by + 42 + i * 20, class: "tip-k" }, svg).textContent = key;
+      mk("text", { x: bx + bw - 12, y: by + 42 + i * 20, "text-anchor": "end", class: "tip" }, svg).textContent = kwhNet(v);
+    });
+  }
+  renderNetNote(slots);
+}
+
+function renderNetNote(slots) {
+  const note = $("net-note"); note.textContent = "";
+  if (!statRows.length) return;
+  const put = (text, strong) => { note.append(text); if (strong) { const b = document.createElement("b"); b.textContent = strong; note.append(b); } };
+  const b = billed(slots), hourly = billed(netSlots(60)), open = slots.find(s => s.open);
+  if (netMin === 60) {
+    put("Billed today: ", kwhNet(b.imp)); put(" imported, ", kwhNet(b.exp));
+    put(" exported. ", kwhNet(b.offset)); put(" offset within the hour.");
+  } else {
+    put("What-if, billing is still hourly. At 15 min today: ", kwhNet(b.imp)); put(" imported, ", kwhNet(b.exp));
+    put(" exported, ", kwhNet(hourly.offset - b.offset)); put(" less offset.");
+  }
+  if (open) { const net = open.exp - open.imp; put(netMin === 60 ? " This hour so far: " : " This interval so far: ", kwhNet(Math.abs(net))); put(net >= 0 ? " net export." : " net import."); }
+}
+
+function setNetMin(mins) {
+  netMin = mins;
+  try { localStorage.setItem("fv-panel-neto", String(mins)); } catch (e) {}
+  for (const b of document.querySelectorAll("[data-net]")) b.setAttribute("aria-pressed", String(Number(b.dataset.net) === mins));
+  renderNet();
+}
+for (const b of document.querySelectorAll("[data-net]")) b.onclick = () => setNetMin(Number(b.dataset.net));
+setNetMin(netMin);
+
+// las dos gráficas comparten eje de tiempo: en pantallas estrechas se desplazan a la vez
+const chartWraps = [...document.querySelectorAll(".chart-wrap")];
+for (const w of chartWraps) w.addEventListener("scroll", () => { for (const o of chartWraps) if (o !== w) o.scrollLeft = w.scrollLeft; });
+
 function scrubAt(ev) {
-  const svg = $("chart"), r = svg.getBoundingClientRect();
+  const svg = ev.currentTarget, r = svg.getBoundingClientRect();
   const vx = (ev.clientX - r.left) / r.width * CH.W;
   const d0 = midnight().getTime() / 1000, t0 = d0 + 6 * 3600, t1 = d0 + 21 * 3600;
   scrubT = vx < CH.L || vx > CH.R ? null : t0 + (vx - CH.L) / (CH.R - CH.L) * (t1 - t0);
@@ -734,9 +897,11 @@ function scrubAt(ev) {
   if (ev.pointerType !== "mouse") scrubTimer = setTimeout(() => { scrubT = null; renderChart(); }, 6000);
   renderChart();
 }
-$("chart").addEventListener("pointermove", scrubAt);
-$("chart").addEventListener("pointerdown", scrubAt);
-$("chart").addEventListener("pointerleave", ev => { if (ev.pointerType === "mouse") { scrubT = null; renderChart(); } });
+for (const svg of [$("chart"), $("netchart")]) {
+  svg.addEventListener("pointermove", scrubAt);
+  svg.addEventListener("pointerdown", scrubAt);
+  svg.addEventListener("pointerleave", ev => { if (ev.pointerType === "mouse") { scrubT = null; renderChart(); } });
+}
 
 function renderSun() {
   const s = states[E.sun]; if (!s) return;
@@ -776,18 +941,18 @@ function renderSun() {
   }
   mk("text", { x: L, y: base + 22, class: "ax", "text-anchor": "start" }, svg).textContent = "↑ " + hm(rise);
   mk("text", { x: R, y: base + 22, class: "ax", "text-anchor": "end" }, svg).textContent = hm(set) + " ↓";
-  mk("text", { x: (L + R) / 2, y: base + 22, class: "ax", "text-anchor": "middle" }, svg).textContent = "máx. " + nf0.format(noonEl) + "°";
+  mk("text", { x: (L + R) / 2, y: base + 22, class: "ax", "text-anchor": "middle" }, svg).textContent = "max " + nf0.format(noonEl) + "°";
 }
 
 /* tema: sigue al sistema hasta que se elige uno; se recuerda en este navegador */
 function applyTheme(t) {
   if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
   const dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  $("theme").textContent = dark ? "Claro" : "Oscuro";
+  $("theme").textContent = dark ? "Light" : "Dark";
   renderChart(); renderSun();
 }
 $("theme").onclick = () => {
-  const dark = $("theme").textContent === "Oscuro";
+  const dark = $("theme").textContent === "Dark";
   const t = dark ? "dark" : "light";
   try { localStorage.setItem("fv-panel-tema", t); } catch (e) {}
   applyTheme(t);

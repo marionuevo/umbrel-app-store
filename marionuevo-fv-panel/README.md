@@ -1,4 +1,4 @@
-# Fotovoltaica
+# Solar Live (Fotovoltaica)
 
 Panel en directo de la fotovoltaica de casa. Es un HTML (`www/index.html`) que
 se conecta al websocket de Home Assistant, servido por nginx detrás del login

@@ -2,19 +2,19 @@ manifestVersion: 1
 id: marionuevo-fv-panel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fv-panel/icon.svg
 category: automation
-name: Fotovoltaica
-version: "1.0.1"
-tagline: La producción de las placas y el consumo de casa, en directo
+name: Solar Live
+version: "1.1.0"
+tagline: Live solar production and home consumption
 description: >
-  Panel de supervisión de la instalación fotovoltaica conectado al websocket de
-  Home Assistant: flujos de energía entre placas, casa y red, producción frente
-  al límite del inversor, autonomía y autoconsumo, curva del día con excedente
-  y compra, recorrido del sol y balance del día en kWh y euros.
+  Solar monitoring panel connected to the Home Assistant websocket: energy flows
+  between panels, home and grid, production against the inverter limit, autonomy
+  and self-consumption, the day's curve with surplus and imports, net balance per
+  billing hour, the sun's path and the daily balance in kWh and euros.
 
 
-  Pensado para dejarlo fijo en un iPad. El token de Home Assistant se guarda en
-  data/config.local.js dentro de la app y solo se sirve tras iniciar sesión en
-  Umbrel; si no existe, el panel lo pide la primera vez.
+  Designed to stay on an iPad. The Home Assistant token is kept in
+  data/config.local.js inside the app and is only served after signing in to
+  Umbrel; if it is missing, the panel asks for it the first time.
 developer: Mario
 website: https://github.com/marionuevo/umbrel-app-store
 dependencies: []
@@ -26,7 +26,6 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  Franja de estado arriba (vertiendo o comprando, por qué y €/h al momento),
-  cables del flujo con grosor según la potencia y curva del día con signo:
-  el sol encima del cero, la compra debajo y el valor de cada minuto al pasar
-  el ratón o tocar.
+  New net balance strip under the day's curve: imports and exports per hour, as
+  they are billed, with a simulated 15-minute view to compare. Today's savings
+  now use the hourly net. The whole interface is now in English.
