@@ -21,6 +21,18 @@ para poder revocarlo sin tocar nada más.
 Si el fichero no existe, el panel pide la dirección y el token la primera vez y
 los guarda en ese navegador.
 
+## Precios del contrato
+
+Opcionales, en el mismo `config.local.js` y sin impuestos:
+
+```js
+window.HA_CONFIG.tariff = { import: { p1: 0.20, p2: 0.12, p3: 0.10 }, export: 0.04 };
+```
+
+`import` admite los tres periodos del peaje 2.0TD (el panel elige el de cada hora
+local, con fines de semana y festivos nacionales de fecha fija en P3) o un precio
+único. Sin `tariff` se usan los sensores de tarifa de SolarNet.
+
 ## Desarrollo
 
 `~/AIWork/solar-panel/index.html` en el Mac es un enlace a `www/index.html`;

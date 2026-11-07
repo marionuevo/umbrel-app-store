@@ -395,6 +395,7 @@ const E = {
 };
 const IMP = "sensor.smart_meter_63a_1_real_energy_consumed";   // Wh acumulados
 const EXP = "sensor.smart_meter_63a_1_real_energy_produced";
+const PVE = "sensor.primo_3_0_1_energy_day";                    // Wh del día, para el ahorro por hora
 const INVERTER_W = 3000;
 const STORE = "fv-panel-conexion";
 
@@ -403,16 +404,40 @@ const nf0 = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 });
 const nf1 = new Intl.NumberFormat("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const nf2 = new Intl.NumberFormat("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const eur = new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" });
+const eur3 = new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR", minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const hm = d => d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
 const states = {};                 // entity_id -> {s, a}
 const series = { pv: [], load: [] };  // [epoch s, W]
 let todayImpWh = null, todayExpWh = null;
-let statRows = [];                 // [inicio s, Wh comprados, Wh vertidos] cada 5 min desde medianoche
+let statRows = [];                 // [inicio s, Wh comprados, Wh vertidos, Wh producidos] cada 5 min desde medianoche
 let statEnd = null;                // lecturas de los contadores al cerrar la última estadística
 
 const num = id => { const v = parseFloat(states[E[id]]?.s); return Number.isFinite(v) ? v : null; };
 const kwh = wh => wh == null ? "–" : nf1.format(wh / 1000) + " kWh";
+
+/* ---------- precios ---------- */
+// Los del contrato van en config.local.js (fuera de git), sin impuestos:
+//   window.HA_CONFIG.tariff = { import: { p1: 0.201, p2: 0.119, p3: 0.097 }, export: 0.04 };
+// import también admite un precio único. Sin tariff se usan los sensores de tarifa de SolarNet.
+// Periodos del peaje 2.0TD en hora local (en Canarias, la canaria): P3 de 0 a 8 h, fines de
+// semana y festivos nacionales de fecha fija; P1 de 10 a 14 y de 18 a 22 h; P2 el resto.
+const TARIFF = window.HA_CONFIG?.tariff || null;
+const FIXED_HOLIDAYS = ["01-01", "01-06", "05-01", "08-15", "10-12", "11-01", "12-06", "12-08", "12-25"];
+const PERIOD_NAME = { 1: "peak", 2: "standard", 3: "off-peak" };
+function period(t) {
+  const d = new Date(t * 1000), h = d.getHours(), wd = d.getDay();
+  const md = String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  if (wd === 0 || wd === 6 || FIXED_HOLIDAYS.includes(md) || h < 8) return 3;
+  return (h >= 10 && h < 14) || (h >= 18 && h < 22) ? 1 : 2;
+}
+const periodByHour = () => TARIFF?.import != null && typeof TARIFF.import === "object";
+function importPrice(t) {
+  if (TARIFF?.import != null) { const v = periodByHour() ? TARIFF.import["p" + period(t)] : TARIFF.import; return Number.isFinite(v) ? v : null; }
+  return num("timp");
+}
+function exportPrice() { const v = TARIFF?.export; return Number.isFinite(v) ? v : num("texp"); }
+const periodLabel = t => periodByHour() ? " · " + PERIOD_NAME[period(t)] : "";
 
 /* ---------- configuración ---------- */
 // Servido desde Home Assistant (/local/...): usa la sesión del propio HA, sin token aparte.
@@ -547,18 +572,33 @@ function liveTail() {   // lo acumulado por los contadores desde la última esta
 }
 function netSlots(mins, live = true) {
   const size = mins * 60, now = Date.now() / 1000, slots = new Map();
-  const add = (t, imp, exp) => {
-    const start = Math.floor(t / size) * size, s = slots.get(start) || { t: start, imp: 0, exp: 0 };
-    s.imp += imp; s.exp += exp; slots.set(start, s);
+  const add = (t, imp, exp, pv = 0) => {
+    const start = Math.floor(t / size) * size, s = slots.get(start) || { t: start, imp: 0, exp: 0, pv: 0 };
+    s.imp += imp; s.exp += exp; s.pv += pv; slots.set(start, s);
   };
-  for (const [t, imp, exp] of statRows) add(t, imp, exp);
+  for (const [t, imp, exp, pv] of statRows) add(t, imp, exp, pv);
   const tail = live ? liveTail() : null;
   if (tail) add(now, tail[0], tail[1]);
   return [...slots.values()].sort((a, b) => a.t - b.t).map(s => ({ ...s, open: s.t + size > now }));
 }
-const billed = slots => slots.reduce((a, s) => ({
-  imp: a.imp + Math.max(0, s.imp - s.exp), exp: a.exp + Math.max(0, s.exp - s.imp), offset: a.offset + Math.min(s.imp, s.exp),
-}), { imp: 0, exp: 0, offset: 0 });
+// cost y credit en euros sin impuestos; NaN si falta algún precio
+const billed = slots => slots.reduce((a, s) => {
+  const imp = Math.max(0, s.imp - s.exp), exp = Math.max(0, s.exp - s.imp), p = importPrice(s.t) ?? NaN, e = exportPrice() ?? NaN;
+  return { imp: a.imp + imp, exp: a.exp + exp, offset: a.offset + Math.min(s.imp, s.exp), cost: a.cost + imp / 1000 * p, credit: a.credit + exp / 1000 * e };
+}, { imp: 0, exp: 0, offset: 0, cost: 0, credit: 0 });
+
+/* Ahorro de cada hora frente a no tener placas: el sol usado en casa y lo compensado dentro de la
+   hora evitan compra a su precio; el saldo vertido se cobra a la compensación. */
+function savingsToday() {
+  const e = exportPrice();
+  if (e == null || !statRows.some(r => r[3] > 0)) return null;
+  let total = 0;
+  for (const s of netSlots(60, false)) {
+    const p = importPrice(s.t); if (p == null) return null;
+    total += (Math.max(0, s.pv - s.exp) + Math.min(s.imp, s.exp)) / 1000 * p + Math.max(0, s.exp - s.imp) / 1000 * e;
+  }
+  return total;
+}
 
 async function loadHistory() {
   const r = await call({ type: "history/history_during_period", start_time: midnight().toISOString(),
@@ -576,11 +616,10 @@ async function loadHistory() {
 async function loadTodayStats() {
   try {
     const r = await call({ type: "recorder/statistics_during_period", start_time: midnight().toISOString(),
-      statistic_ids: [IMP, EXP], period: "5minute", types: ["change", "state"] });
+      statistic_ids: [IMP, EXP, PVE], period: "5minute", types: ["change", "state"] });
     const imp = r[IMP] || [], exp = r[EXP] || [];
-    const rows = new Map();
-    for (const p of imp) rows.set(p.start, [p.start / 1000, p.change || 0, 0]);
-    for (const p of exp) { const row = rows.get(p.start) || [p.start / 1000, 0, 0]; row[2] = p.change || 0; rows.set(p.start, row); }
+    const rows = new Map(), row = p => rows.get(p.start) || [p.start / 1000, 0, 0, 0];
+    for (const [col, list] of [[1, imp], [2, exp], [3, r[PVE] || []]]) for (const p of list) { const x = row(p); x[col] = p.change || 0; rows.set(p.start, x); }
     statRows = [...rows.values()].sort((a, b) => a[0] - b[0]);
     const lastImp = imp[imp.length - 1], lastExp = exp[exp.length - 1];
     statEnd = lastImp && lastExp && lastImp.state != null && lastExp.state != null ? { imp: lastImp.state, exp: lastExp.state } : null;
@@ -606,7 +645,7 @@ function setPulse(id, w, labelId, text) {
 
 function renderState(pv, load, grid, pvHome, exp, imp) {
   const el = $("state"), head = $("st-head"), why = $("st-why");
-  const timp = num("timp"), texp = num("texp");
+  const timp = importPrice(Date.now() / 1000), texp = exportPrice();
   const W = v => `<span class="num">${nf0.format(v)}</span> W`;
   let tone = "", rateK = "", rate = "";
   if (pv == null || load == null || grid == null) { head.textContent = "Waiting for data…"; why.textContent = ""; }
@@ -664,15 +703,15 @@ function render() {
   $("grid-label").textContent = grid < -5 ? "Exporting to the grid" : grid > 5 ? "Importing from the grid" : "Grid";
   $("grid-big").textContent = grid == null ? "–" : nf0.format(Math.abs(grid)) + " W";
   $("grid-big").style.color = gc;
-  const timp = num("timp"), texp = num("texp");
-  $("grid-sub").textContent = grid < -5 && texp != null ? `credited at ${eur.format(texp)}/kWh` : grid > 5 && timp != null ? `at ${eur.format(timp)}/kWh` : "balanced";
+  const nowS = Date.now() / 1000, timp = importPrice(nowS), texp = exportPrice();
+  $("grid-sub").textContent = grid < -5 && texp != null ? `credited at ${eur3.format(texp)}/kWh` : grid > 5 && timp != null ? `at ${eur3.format(timp)}/kWh${periodLabel(nowS)}` : "balanced";
 
   const eday = num("eday");
   $("eday").textContent = kwh(eday);
   $("eday-sub").textContent = eday != null && pv != null ? "inverter output" : "";
 
   renderInverter();
-  renderTally(eday, timp, texp);
+  renderTally(eday);
   renderSun();
   renderChart();
 }
@@ -690,7 +729,7 @@ function renderInverter() {
   el.lastElementChild.textContent = words[st] || st.replace(/_/g, " ");
 }
 
-function renderTally(edayWh, timp, texp) {
+function renderTally(edayWh) {
   if (edayWh == null || todayExpWh == null || todayImpWh == null) return;
   const selfWh = Math.max(0, edayWh - todayExpWh);
   const loadWh = selfWh + todayImpWh;
@@ -700,10 +739,9 @@ function renderTally(edayWh, timp, texp) {
   $("b-self").style.width = selfWh / total * 100 + "%";
   $("b-exp").style.width = todayExpWh / total * 100 + "%";
   $("b-imp").style.width = todayImpWh / total * 100 + "%";
-  // lo compensado dentro de la hora evita compra a cambio de no cobrar ese vertido
-  const offset = billed(netSlots(60, false)).offset;
-  if (timp != null && texp != null) $("t-save").textContent = eur.format((selfWh + offset) / 1000 * timp + (todayExpWh - offset) / 1000 * texp);
-  $("tally-note").textContent = "since 00:00 · hourly net";
+  const saved = savingsToday();
+  $("t-save").textContent = saved == null ? "–" : eur.format(saved);
+  $("tally-note").textContent = "since 00:00 · hourly net" + (TARIFF ? " · excl. tax" : "");
 }
 
 /* curva del día: eje de 06:00 a 21:00. Con signo, como Tesla u Homey: encima del cero lo que da
@@ -847,13 +885,15 @@ function renderNet() {
 
   if (hover) {
     const net = hover.exp - hover.imp, sx = x(hover.t + size / 2);
-    const rows = [["Imported", hover.imp], ["Exported", hover.exp], [net >= 0 ? "Net export" : "Net import", Math.abs(net)]];
-    const bw = 214, bh = 30 + rows.length * 20, bx = sx + 20 + bw > R ? sx - 20 - bw : sx + 20, by = Math.max(0, (T + B - bh) / 2);
+    const rows = [["Imported", kwhNet(hover.imp)], ["Exported", kwhNet(hover.exp)], [net >= 0 ? "Net export" : "Net import", kwhNet(Math.abs(net))]];
+    const price = net >= 0 ? exportPrice() : importPrice(hover.t);
+    if (price != null && Math.abs(net) >= 1) rows.push([net >= 0 ? "Credit" : "Cost", eur.format(Math.abs(net) / 1000 * price) + " at " + eur3.format(price)]);
+    const bw = 260, bh = 30 + rows.length * 20, bx = sx + 20 + bw > R ? sx - 20 - bw : sx + 20, by = Math.max(0, (T + B - bh) / 2);
     mk("rect", { x: bx, y: by, width: bw, height: bh, rx: 8, class: "tip-bg" }, svg);
-    mk("text", { x: bx + 12, y: by + 20, class: "tip" }, svg).textContent = hm(new Date(hover.t * 1000)) + "–" + hm(new Date((hover.t + size) * 1000)) + (hover.open ? " · open" : "");
+    mk("text", { x: bx + 12, y: by + 20, class: "tip" }, svg).textContent = hm(new Date(hover.t * 1000)) + "–" + hm(new Date((hover.t + size) * 1000)) + periodLabel(hover.t) + (hover.open ? " · open" : "");
     rows.forEach(([key, v], i) => {
       mk("text", { x: bx + 12, y: by + 42 + i * 20, class: "tip-k" }, svg).textContent = key;
-      mk("text", { x: bx + bw - 12, y: by + 42 + i * 20, "text-anchor": "end", class: "tip" }, svg).textContent = kwhNet(v);
+      mk("text", { x: bx + bw - 12, y: by + 42 + i * 20, "text-anchor": "end", class: "tip" }, svg).textContent = v;
     });
   }
   renderNetNote(slots);
@@ -864,12 +904,14 @@ function renderNetNote(slots) {
   if (!statRows.length) return;
   const put = (text, strong) => { note.append(text); if (strong) { const b = document.createElement("b"); b.textContent = strong; note.append(b); } };
   const b = billed(slots), hourly = billed(netSlots(60)), open = slots.find(s => s.open);
+  const money = v => Number.isFinite(v) ? " (" + eur.format(v) + ")" : "";
   if (netMin === 60) {
-    put("Billed today: ", kwhNet(b.imp)); put(" imported, ", kwhNet(b.exp));
-    put(" exported. ", kwhNet(b.offset)); put(" offset within the hour.");
+    put("Billed today: ", kwhNet(b.imp)); put(money(b.cost) + " imported, ", kwhNet(b.exp));
+    put(money(b.credit) + " exported. ", kwhNet(b.offset)); put(" offset within the hour.");
   } else {
-    put("What-if, billing is still hourly. At 15 min today: ", kwhNet(b.imp)); put(" imported, ", kwhNet(b.exp));
-    put(" exported, ", kwhNet(hourly.offset - b.offset)); put(" less offset.");
+    const extra = b.cost - b.credit - (hourly.cost - hourly.credit);
+    put("What-if, billing is still hourly. At 15 min today: ", kwhNet(b.imp)); put(money(b.cost) + " imported, ", kwhNet(b.exp));
+    put(money(b.credit) + " exported, ", kwhNet(hourly.offset - b.offset)); put(" less offset" + (Number.isFinite(extra) ? ", " + eur.format(extra) + " more on the bill." : "."));
   }
   if (open) { const net = open.exp - open.imp; put(netMin === 60 ? " This hour so far: " : " This interval so far: ", kwhNet(Math.abs(net))); put(net >= 0 ? " net export." : " net import."); }
 }

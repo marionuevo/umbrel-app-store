@@ -3,7 +3,7 @@ id: marionuevo-fv-panel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fv-panel/icon.svg
 category: automation
 name: Solar Live
-version: "1.1.0"
+version: "1.2.0"
 tagline: Live solar production and home consumption
 description: >
   Solar monitoring panel connected to the Home Assistant websocket: energy flows
@@ -26,6 +26,7 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  New net balance strip under the day's curve: imports and exports per hour, as
-  they are billed, with a simulated 15-minute view to compare. Today's savings
-  now use the hourly net. The whole interface is now in English.
+  Contract prices by 2.0TD period (peak, standard, off-peak) and the export
+  price, set in config.local.js. Today's savings are now worked out hour by
+  hour at each hour's price, and the net balance shows what each hour costs or
+  earns.
