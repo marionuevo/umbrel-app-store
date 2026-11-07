@@ -31,7 +31,17 @@ window.HA_CONFIG.tariff = { import: { p1: 0.20, p2: 0.12, p3: 0.10 }, export: 0.
 
 `import` admite los tres periodos del peaje 2.0TD (el panel elige el de cada hora
 local, con fines de semana y festivos nacionales de fecha fija en P3) o un precio
-único. Sin `tariff` se usan los sensores de tarifa de SolarNet.
+único. También admite una lista con la fecha en que entra cada tarifa, para que
+una renovación cambie sola:
+
+```js
+window.HA_CONFIG.tariff = [
+  { import: { p1: 0.20, p2: 0.12, p3: 0.10 }, export: 0.04 },
+  { from: "2027-01-01", import: { p1: 0.22, p2: 0.15, p3: 0.12 }, export: 0.035 },
+];
+```
+
+Sin `tariff` se usan los sensores de tarifa de SolarNet.
 
 ## Desarrollo
 

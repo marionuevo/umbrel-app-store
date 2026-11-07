@@ -93,6 +93,19 @@ button.link:hover, button.link:focus-visible { color: var(--fg); }
 .state .head .num { letter-spacing: -.01em; }
 .state .why { color: var(--muted); font-size: .95rem; flex: 1 1 260px; }
 .state .rate { display: grid; justify-items: end; gap: 2px; margin-left: auto; }
+/* periodo de la tarifa ahora: más intenso cuanto más cara la luz; las barras repiten el nivel */
+.tariff-now { --lv: 14%; display: inline-flex; align-items: center; gap: 10px; padding: 7px 14px 7px 11px; border-radius: 999px;
+  background: color-mix(in srgb, var(--grid-in) var(--lv), transparent); border: 1px solid color-mix(in srgb, var(--grid-in) calc(var(--lv) * 2.6), transparent); }
+.tariff-now[hidden] { display: none; }
+.tariff-now[data-level="2"] { --lv: 22%; }
+.tariff-now[data-level="3"] { --lv: 32%; }
+.tariff-now .lvl { display: inline-flex; gap: 3px; align-items: flex-end; }
+.tariff-now .lvl i { width: 5px; border-radius: 2px; background: color-mix(in srgb, var(--fg) 22%, transparent); }
+.tariff-now .lvl i:nth-child(1) { height: 8px; } .tariff-now .lvl i:nth-child(2) { height: 12px; } .tariff-now .lvl i:nth-child(3) { height: 16px; }
+.tariff-now .lvl i.on { background: var(--grid-in); }
+.tariff-now .tn-name { font-family: var(--font-num); font-size: .78rem; letter-spacing: .09em; text-transform: uppercase; color: var(--fg); }
+.tariff-now .tn-price { font-family: var(--font-num); font-size: 1.05rem; color: var(--fg); font-variant-numeric: tabular-nums; }
+.tariff-now .tn-until { font-size: .82rem; color: var(--muted); }
 .state .rate .v { font-family: var(--font-num); font-size: 1.4rem; color: var(--tone); }
 
 /* flujos */
@@ -212,6 +225,12 @@ dialog input:focus-visible, .btn:focus-visible { outline: 2px solid var(--steel)
     <section class="card state" id="state" aria-label="Current status">
       <div class="head" id="st-head">Waiting for data…</div>
       <div class="why" id="st-why"></div>
+      <div class="tariff-now" id="tariff-now" hidden>
+        <span class="lvl" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="tn-name" id="tn-name"></span>
+        <span class="tn-price" id="tn-price"></span>
+        <span class="tn-until" id="tn-until"></span>
+      </div>
       <div class="rate"><span class="label" id="st-rate-k"></span><span class="v" id="st-rate"></span></div>
     </section>
 
@@ -419,10 +438,16 @@ const kwh = wh => wh == null ? "–" : nf1.format(wh / 1000) + " kWh";
 /* ---------- precios ---------- */
 // Los del contrato van en config.local.js (fuera de git), sin impuestos:
 //   window.HA_CONFIG.tariff = { import: { p1: 0.20, p2: 0.12, p3: 0.10 }, export: 0.04 };
+// o una lista con la fecha en que entra cada una, para que una renovación cambie sola:
+//   window.HA_CONFIG.tariff = [{ import: {...}, export: 0.04 }, { from: "2026-11-29", import: {...}, export: 0.035 }];
 // import también admite un precio único. Sin tariff se usan los sensores de tarifa de SolarNet.
 // Periodos del peaje 2.0TD en hora local (en Canarias, la canaria): P3 de 0 a 8 h, fines de
 // semana y festivos nacionales de fecha fija; P1 de 10 a 14 y de 18 a 22 h; P2 el resto.
 const TARIFF = window.HA_CONFIG?.tariff || null;
+const TARIFFS = (Array.isArray(TARIFF) ? TARIFF : TARIFF ? [TARIFF] : [])
+  .map(x => ({ ...x, fromS: x.from ? new Date(x.from + "T00:00:00").getTime() / 1000 : -Infinity }))
+  .sort((a, b) => a.fromS - b.fromS);
+const tariffAt = t => { let cur = null; for (const x of TARIFFS) if (x.fromS <= t) cur = x; return cur || TARIFFS[0] || null; };
 const FIXED_HOLIDAYS = ["01-01", "01-06", "05-01", "08-15", "10-12", "11-01", "12-06", "12-08", "12-25"];
 const PERIOD_NAME = { 1: "peak", 2: "standard", 3: "off-peak" };
 function period(t) {
@@ -431,13 +456,20 @@ function period(t) {
   if (wd === 0 || wd === 6 || FIXED_HOLIDAYS.includes(md) || h < 8) return 3;
   return (h >= 10 && h < 14) || (h >= 18 && h < 22) ? 1 : 2;
 }
-const periodByHour = () => TARIFF?.import != null && typeof TARIFF.import === "object";
+const periodByHour = (t = Date.now() / 1000) => { const x = tariffAt(t); return x?.import != null && typeof x.import === "object"; };
 function importPrice(t) {
-  if (TARIFF?.import != null) { const v = periodByHour() ? TARIFF.import["p" + period(t)] : TARIFF.import; return Number.isFinite(v) ? v : null; }
+  const x = tariffAt(t);
+  if (x?.import != null) { const v = typeof x.import === "object" ? x.import["p" + period(t)] : x.import; return Number.isFinite(v) ? v : null; }
   return num("timp");
 }
-function exportPrice() { const v = TARIFF?.export; return Number.isFinite(v) ? v : num("texp"); }
-const periodLabel = t => periodByHour() ? " · " + PERIOD_NAME[period(t)] : "";
+function exportPrice(t = Date.now() / 1000) { const v = tariffAt(t)?.export; return Number.isFinite(v) ? v : num("texp"); }
+const periodLabel = t => periodByHour(t) ? " · " + PERIOD_NAME[period(t)] : "";
+// primera hora en que cambia el periodo (los periodos cambian en punto)
+function nextPeriodChange(t) {
+  const p = period(t);
+  for (let x = Math.floor(t / 3600) * 3600 + 3600, i = 0; i < 24 * 8; x += 3600, i++) if (period(x) !== p) return x;
+  return null;
+}
 
 /* ---------- configuración ---------- */
 // Servido desde Home Assistant (/local/...): usa la sesión del propio HA, sin token aparte.
@@ -583,18 +615,17 @@ function netSlots(mins, live = true) {
 }
 // cost y credit en euros sin impuestos; NaN si falta algún precio
 const billed = slots => slots.reduce((a, s) => {
-  const imp = Math.max(0, s.imp - s.exp), exp = Math.max(0, s.exp - s.imp), p = importPrice(s.t) ?? NaN, e = exportPrice() ?? NaN;
+  const imp = Math.max(0, s.imp - s.exp), exp = Math.max(0, s.exp - s.imp), p = importPrice(s.t) ?? NaN, e = exportPrice(s.t) ?? NaN;
   return { imp: a.imp + imp, exp: a.exp + exp, offset: a.offset + Math.min(s.imp, s.exp), cost: a.cost + imp / 1000 * p, credit: a.credit + exp / 1000 * e };
 }, { imp: 0, exp: 0, offset: 0, cost: 0, credit: 0 });
 
 /* Ahorro de cada hora frente a no tener placas: el sol usado en casa y lo compensado dentro de la
    hora evitan compra a su precio; el saldo vertido se cobra a la compensación. */
 function savingsToday() {
-  const e = exportPrice();
-  if (e == null || !statRows.some(r => r[3] > 0)) return null;
+  if (!statRows.some(r => r[3] > 0)) return null;
   let total = 0;
   for (const s of netSlots(60, false)) {
-    const p = importPrice(s.t); if (p == null) return null;
+    const p = importPrice(s.t), e = exportPrice(s.t); if (p == null || e == null) return null;
     total += (Math.max(0, s.pv - s.exp) + Math.min(s.imp, s.exp)) / 1000 * p + Math.max(0, s.exp - s.imp) / 1000 * e;
   }
   return total;
@@ -665,6 +696,24 @@ function renderState(pv, load, grid, pvHome, exp, imp) {
   }
   el.className = "card state " + tone;
   $("st-rate-k").textContent = rateK; $("st-rate").textContent = rate;
+  renderTariffNow();
+}
+
+function renderTariffNow() {
+  const box = $("tariff-now"), now = Date.now() / 1000;
+  if (!periodByHour(now)) { box.hidden = true; return; }
+  const p = period(now), level = 4 - p, next = nextPeriodChange(now);   // P1 es la más cara
+  box.hidden = false; box.dataset.level = level;
+  box.querySelectorAll(".lvl i").forEach((i, k) => i.classList.toggle("on", k < level));
+  $("tn-name").textContent = PERIOD_NAME[p];
+  $("tn-price").textContent = eur3.format(importPrice(now)) + "/kWh";
+  let until = "";
+  if (next) {
+    const d = new Date(next * 1000), same = d.toDateString() === new Date(now * 1000).toDateString();
+    until = "until " + (same ? "" : d.toLocaleDateString("en-GB", { weekday: "short" }) + " ") + hm(d) + " → " + PERIOD_NAME[period(next)];
+  }
+  $("tn-until").textContent = until;
+  box.setAttribute("aria-label", `Tariff now: ${PERIOD_NAME[p]}, ${eur3.format(importPrice(now))} per kWh, ${until}`);
 }
 
 function render() {
@@ -704,7 +753,7 @@ function render() {
   $("grid-big").textContent = grid == null ? "–" : nf0.format(Math.abs(grid)) + " W";
   $("grid-big").style.color = gc;
   const nowS = Date.now() / 1000, timp = importPrice(nowS), texp = exportPrice();
-  $("grid-sub").textContent = grid < -5 && texp != null ? `credited at ${eur3.format(texp)}/kWh` : grid > 5 && timp != null ? `at ${eur3.format(timp)}/kWh${periodLabel(nowS)}` : "balanced";
+  $("grid-sub").textContent = grid < -5 && texp != null ? `credited at ${eur3.format(texp)}/kWh` : grid > 5 && timp != null ? `at ${eur3.format(timp)}/kWh` : "balanced";
 
   const eday = num("eday");
   $("eday").textContent = kwh(eday);
@@ -741,7 +790,7 @@ function renderTally(edayWh) {
   $("b-imp").style.width = todayImpWh / total * 100 + "%";
   const saved = savingsToday();
   $("t-save").textContent = saved == null ? "–" : eur.format(saved);
-  $("tally-note").textContent = "since 00:00 · hourly net" + (TARIFF ? " · excl. tax" : "");
+  $("tally-note").textContent = "since 00:00 · hourly net" + (TARIFFS.length ? " · excl. tax" : "");
 }
 
 /* curva del día: eje de 06:00 a 21:00. Con signo, como Tesla u Homey: encima del cero lo que da
@@ -809,7 +858,9 @@ function renderChart() {
   const now = Date.now() / 1000;
   if (now > t0 && now < t1) {
     mk("line", { x1: x(now), x2: x(now), y1: T, y2: B, stroke: "var(--muted)", "stroke-dasharray": "3 4" }, svg);
-    mk("text", { x: x(now) + 6, y: T + 10, class: "ax" }, svg).textContent = "now";
+    // si el rótulo del pico cae cerca, «now» baja al pie para no pisarlo
+    const nearPeak = has && Math.abs(x(pv.reduce((a, b) => b[1] > a[1] ? b : a)[0]) - x(now)) < 110;
+    mk("text", { x: x(now) + 6, y: nearPeak ? B - 8 : T + 10, class: "ax" }, svg).textContent = "now";
   }
   mk("text", { x: x(d0 + 16 * 3600), y: B - 8, "text-anchor": "middle", class: "ax", fill: "var(--steel)" }, svg).textContent = "backup";
 
@@ -886,7 +937,7 @@ function renderNet() {
   if (hover) {
     const net = hover.exp - hover.imp, sx = x(hover.t + size / 2);
     const rows = [["Imported", kwhNet(hover.imp)], ["Exported", kwhNet(hover.exp)], [net >= 0 ? "Net export" : "Net import", kwhNet(Math.abs(net))]];
-    const price = net >= 0 ? exportPrice() : importPrice(hover.t);
+    const price = net >= 0 ? exportPrice(hover.t) : importPrice(hover.t);
     if (price != null && Math.abs(net) >= 1) rows.push([net >= 0 ? "Credit" : "Cost", eur.format(Math.abs(net) / 1000 * price) + " at " + eur3.format(price)]);
     const bw = 260, bh = 30 + rows.length * 20, bx = sx + 20 + bw > R ? sx - 20 - bw : sx + 20, by = Math.max(0, (T + B - bh) / 2);
     mk("rect", { x: bx, y: by, width: bw, height: bh, rx: 8, class: "tip-bg" }, svg);
