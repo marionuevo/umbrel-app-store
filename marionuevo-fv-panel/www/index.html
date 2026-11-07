@@ -418,7 +418,7 @@ const kwh = wh => wh == null ? "–" : nf1.format(wh / 1000) + " kWh";
 
 /* ---------- precios ---------- */
 // Los del contrato van en config.local.js (fuera de git), sin impuestos:
-//   window.HA_CONFIG.tariff = { import: { p1: 0.201, p2: 0.119, p3: 0.097 }, export: 0.04 };
+//   window.HA_CONFIG.tariff = { import: { p1: 0.20, p2: 0.12, p3: 0.10 }, export: 0.04 };
 // import también admite un precio único. Sin tariff se usan los sensores de tarifa de SolarNet.
 // Periodos del peaje 2.0TD en hora local (en Canarias, la canaria): P3 de 0 a 8 h, fines de
 // semana y festivos nacionales de fecha fija; P1 de 10 a 14 y de 18 a 22 h; P2 el resto.
