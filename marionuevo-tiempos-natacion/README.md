@@ -13,7 +13,7 @@ Historial de marcas de una nadadora: una fila por cada prueba nadada. Calcula la
   - Una nadada que ya estaba (misma fecha, prueba y tiempo) no se duplica.
   - **Piscina:** los resultados de Splash no dicen la longitud. La app la busca en los PDF de bases de la misma carpeta (INFO, instrucciones, normativa: «Piscina … 25 metros», «50 m y 8 calles»). Si la encuentra, la marca como deducida y la web pide confirmarla; si no, la web pregunta 25 o 50 m para toda la competición.
   - Con nadadas nuevas manda un `POST {title, message, url}` al `webhook` de Home Assistant, por ejemplo «400 libre 5:36.50, mejor marca. 50 mariposa 40.21.».
-- **Web:** tres pestañas. **Mejores marcas**: resumen de la temporada y tabla por prueba con la mejor de 25 m, la de 50 m y la de la temporada. **Evolución**: gráfica de cada prueba por fechas, con 25 y 50 m por separado y las mejores marcas en su momento rodeadas. **Historial**: todas las nadadas con filtros por temporada, prueba y piscina, alta manual y exportación a CSV. Al tocar una nadada se abre su ficha: datos, corrección, papelera y, si tiene parciales, la gráfica y la tabla de ritmo cada 50 o 100 m.
+- **Web:** tres pestañas. **Mejores marcas**: resumen de la temporada y tabla por prueba con la mejor de 25 m, la de 50 m, la mejor en puntos AQUA (con su equivalente en la otra piscina) y la de la temporada. **Evolución**: gráfica de cada prueba por fechas, en tiempo real (25 y 50 m por separado), en tiempo equivalente en 25 o en 50 m, o en puntos AQUA, con las mejores marcas en su momento rodeadas. **Historial**: todas las nadadas con filtros por temporada, prueba y piscina, alta manual y exportación a CSV. Al tocar una nadada se abre su ficha: datos, corrección, papelera y, si tiene parciales, la gráfica y la tabla de ritmo cada 50 o 100 m.
 - La papelera (`data/papelera.json`) guarda lo que se quita desde la web; «Deshacer» recupera la última.
 
 ## Privacidad
@@ -24,7 +24,7 @@ El repo es público. Los nombres y las marcas solo están en `data/` del Umbrel 
 
 | Archivo | Qué es |
 |---|---|
-| `config.json` | Nombre que se muestra, `patrones` (cómo sale en los PDF, en mayúsculas o no; vale el principio del nombre), owncloud, carpetas, intervalo, webhook y URL de la app. Modelo en `config.example.json` |
+| `config.json` | Nombre que se muestra, `sexo` (`f` o `m`, para los tiempos base), `patrones` (cómo sale en los PDF, en mayúsculas o no; vale el principio del nombre), owncloud, carpetas, intervalo, webhook y URL de la app. Modelo en `config.example.json` |
 | `nadadas.json` | Las nadadas |
 | `papelera.json` | Nadadas quitadas desde la web |
 | `estado.json` | PDF ya leídos (`revisados`, con su `etag`), última búsqueda, errores y eventos. Lo escribe la app |
@@ -37,7 +37,7 @@ El repo es público. Los nombres y las marcas solo están en `data/` del Umbrel 
 
 | Ruta | Qué hace |
 |---|---|
-| `GET api/datos` | Nombre, nadadas, tamaño de la papelera y estado de la búsqueda |
+| `GET api/datos` | Nombre, nadadas (con `_pts`, los puntos AQUA, y `_eq`, el tiempo equivalente en cada piscina), tamaño de la papelera y estado de la búsqueda |
 | `GET api/csv` | Todas las nadadas en CSV (`;`, UTF-8 con BOM para Numbers y Excel) |
 | `POST api/nadada` | Con `id`, corrige esos campos; sin `id`, añade una nadada (`fecha`, `distancia`, `estilo` y `tipo` obligatorios) |
 | `POST api/papelera` `{id}` | Mueve la nadada a la papelera |

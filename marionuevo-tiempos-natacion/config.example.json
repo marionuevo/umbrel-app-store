@@ -7,5 +7,6 @@
                "/CAMPEONATO REGIONALES/", "/CIRCUITO DE NATACIÓN/", "/COPA DE CLUBS/"],
   "intervalo_min": 30,
   "webhook": "http://10.80.20.22:8123/api/webhook/<id-del-webhook>",
-  "url_app": "http://10.80.20.22:9098"
+  "url_app": "http://10.80.20.22:9098",
+  "sexo": "f"
 }
