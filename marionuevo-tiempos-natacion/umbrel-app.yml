@@ -1,0 +1,30 @@
+manifestVersion: 1
+id: marionuevo-tiempos-natacion
+icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-tiempos-natacion/icon.svg
+category: automation
+name: Tiempos de natación
+version: "1.0.0"
+tagline: Historial de marcas de una nadadora, con los resultados oficiales al día
+description: >
+  Guarda cada prueba nadada (fecha, competición, piscina de 25 o 50 m, tiempo,
+  tipo, puesto y parciales) y calcula las mejores marcas por piscina, la
+  evolución de cada prueba y el ritmo por parciales de cada carrera.
+
+
+  Cada media hora busca PDF de resultados nuevos en el owncloud público de la
+  Federación Canaria de Natación, saca las marcas de la nadadora configurada y
+  avisa al iPhone por Home Assistant. Las nadadas también se pueden añadir o
+  corregir a mano. Los datos van en data/ dentro de la app (ver README).
+developer: Mario
+website: https://github.com/marionuevo/umbrel-app-store
+dependencies: []
+repo: https://github.com/marionuevo/umbrel-app-store
+support: https://github.com/marionuevo/umbrel-app-store/issues
+port: 9098
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+releaseNotes: >
+  Primera versión: mejores marcas por piscina, evolución, historial, ritmo por
+  parciales y búsqueda automática de resultados.

@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tiempos de natación</title>
+<style>
+/* Un solo tema azul marino, como la Guía de jornada. La nadadora va en dorado; 25 m en verde agua, 50 m en coral. */
+:root {
+  color-scheme: dark;
+  --bg: #0b1424; --panel: #12203a; --panel2: #18294a; --line: #233657; --grid: #1b2c4b;
+  --fg: #eef2f8; --fg2: #b3bfd6; --muted: #8391ad;
+  --oro: #f0bf4c; --oro-suave: rgba(240,191,76,.14);
+  --p25: #4fd1c5; --p50: #f4876e;
+  --ok: #5fd08f; --mal: #f08a74;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --cond: "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.45 var(--sans); }
+.wrap { max-width: 1040px; margin: 0 auto; padding-block: 18px 60px;
+  padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: max(14px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 18px; }
+.num, td, .t { font-variant-numeric: tabular-nums; }
+header { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: end; justify-content: space-between; }
+h1 { font: 700 clamp(28px, 5vw, 40px)/1 var(--cond); margin: 0; letter-spacing: .01em; }
+h1 span { color: var(--oro); }
+h2 { font: 600 20px/1.2 var(--cond); margin: 0; letter-spacing: .02em; }
+.estado { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.estado .err { color: var(--mal); }
+button, select, input { font: inherit; color: var(--fg); }
+button { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--fg2); }
+button.prim { background: var(--oro); color: #1b1400; border-color: var(--oro); font-weight: 600; }
+button.peligro { color: var(--mal); }
+select, input { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
+:focus-visible { outline: 2px solid var(--oro); outline-offset: 2px; }
+nav { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 5; padding-top: 6px; }
+nav button { border: 0; border-radius: 8px 8px 0 0; background: transparent; color: var(--fg2); padding: 9px 14px; font-weight: 600; }
+nav button[aria-selected="true"] { color: var(--fg); background: var(--panel); box-shadow: inset 0 -2px 0 var(--oro); }
+.avisos { display: grid; gap: 8px; }
+.aviso { background: var(--oro-suave); border: 1px solid rgba(240,191,76,.4); border-radius: 10px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.aviso b { font-weight: 600; }
+.resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.resumen div { background: var(--panel); padding: 12px 14px; display: grid; gap: 2px; }
+.resumen .k { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.resumen .v { font: 600 26px/1.1 var(--cond); font-variant-numeric: tabular-nums; }
+.resumen .d { font-size: 13px; color: var(--fg2); }
+.tabla { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 8px 12px; text-align: left; white-space: nowrap; vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; }
+tbody tr + tr td { border-top: 1px solid var(--grid); }
+tbody tr.clic { cursor: pointer; }
+tbody tr.clic:hover td { background: var(--panel2); }
+td .sub { display: block; color: var(--muted); font-size: 12.5px; }
+.t { font-weight: 600; font-size: 15px; }
+.chip { display: inline-block; font-size: 11.5px; font-weight: 600; letter-spacing: .03em; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--line); color: var(--fg2); vertical-align: 1px; }
+.chip.mm { background: var(--oro); color: #1b1400; border-color: var(--oro); }
+.chip.p25 { color: var(--p25); border-color: rgba(79,209,197,.5); }
+.chip.p50 { color: var(--p50); border-color: rgba(244,135,110,.5); }
+.chip.no { color: var(--muted); border-style: dashed; }
+.filtros { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.filtros label { display: inline-flex; gap: 6px; align-items: center; color: var(--fg2); font-size: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.leyenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--fg2); }
+.leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.nota { color: var(--muted); font-size: 13px; }
+.grafica { position: relative; }
+.grafica svg { display: block; width: 100%; height: auto; overflow: visible; }
+.tip { position: absolute; pointer-events: none; background: var(--fg); color: var(--bg); border-radius: 8px; padding: 7px 10px; font-size: 13px; line-height: 1.35; white-space: nowrap; transform: translate(-50%, -100%); z-index: 3; font-variant-numeric: tabular-nums; }
+.tip i { font-style: normal; opacity: .7; }
+.vacio { color: var(--muted); padding: 20px; text-align: center; }
+dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 24px); }
+dialog::backdrop { background: rgba(3,8,18,.7); }
+.dlg { padding: 16px; display: grid; gap: 14px; }
+.dlg-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+.dlg-head .t { font: 700 30px/1 var(--cond); color: var(--oro); }
+form.campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+form.campos label { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+form.campos label.ancho { grid-column: 1 / -1; }
+.botones { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: transparent; color: var(--fg2); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.toast { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 9px 14px; border-radius: 10px; font-weight: 600; z-index: 20; }
+@media (max-width: 560px) { th, td { padding: 7px 8px; } .resumen .v { font-size: 22px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Tiempos de <span id="nombre">natación</span></h1>
+    <div class="estado" id="estado"></div>
+  </header>
+  <div class="avisos" id="avisos"></div>
+  <nav role="tablist">
+    <button role="tab" data-tab="marcas" aria-selected="true">Mejores marcas</button>
+    <button role="tab" data-tab="evolucion" aria-selected="false">Evolución</button>
+    <button role="tab" data-tab="historial" aria-selected="false">Historial</button>
+  </nav>
+
+  <section id="tab-marcas" class="tab" style="display:grid;gap:16px">
+    <div class="resumen" id="resumen"></div>
+    <div class="nota">Solo cuentan las marcas oficiales: los relevos, los parciales y las descalificaciones no son mejor marca. Toca una prueba para ver su evolución.</div>
+    <div class="tabla"><table id="t-marcas"></table></div>
+  </section>
+
+  <section id="tab-evolucion" class="tab" hidden style="display:grid;gap:14px">
+    <div class="filtros">
+      <label for="ev-prueba">Prueba <select id="ev-prueba"></select></label>
+      <label><input type="checkbox" id="ev-otras"> Ver también parciales y relevos</label>
+    </div>
+    <div class="card">
+      <div class="leyenda"><span><i style="background:var(--p25)"></i>Piscina de 25 m</span><span><i style="background:var(--p50)"></i>Piscina de 50 m</span><span><i style="background:var(--oro)"></i>Mejor marca en su momento</span></div>
+      <div class="nota">Más abajo es más rápido.</div>
+      <div class="grafica" id="g-evol"></div>
+    </div>
+    <div class="tabla"><table id="t-evol"></table></div>
+  </section>
+
+  <section id="tab-historial" class="tab" hidden style="display:grid;gap:14px">
+    <div class="filtros">
+      <label for="h-temp">Temporada <select id="h-temp"></select></label>
+      <label for="h-prueba">Prueba <select id="h-prueba"></select></label>
+      <label for="h-pisc">Piscina <select id="h-pisc"><option value="">Todas</option><option value="25">25 m</option><option value="50">50 m</option><option value="?">Sin indicar</option></select></label>
+      <button type="button" class="prim" id="b-nueva">Añadir nadada</button>
+      <a href="api/csv" style="color:var(--fg2);font-size:14px">Descargar CSV</a>
+    </div>
+    <div class="tabla"><table id="t-hist"></table></div>
+  </section>
+</div>
+
+<dialog id="dlg"><div class="dlg" id="dlg-body"></div></dialog>
+
+<script>
+const ESTILOS = ["mariposa", "espalda", "braza", "libre", "estilos"];
+const NOMBRE_ESTILO = { libre: "libre", espalda: "espalda", braza: "braza", mariposa: "mariposa", estilos: "estilos" };
+const TIPOS = { oficial: "Oficial", parcial: "Parcial", relevo: "Relevo", dsq: "Descalificada" };
+let D = { nadadas: [], estado: {} }, tab = "marcas", evPrueba = null;
+try { const s = JSON.parse(localStorage.getItem("tiempos-ui") || "{}"); tab = s.tab || tab; evPrueba = s.ev || null; } catch (e) {}
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function fmt(t) { if (t == null) return "—"; if (t < 60) return t.toFixed(2); const m = Math.floor(t / 60), s = t - m * 60; return m + ":" + (s < 10 ? "0" : "") + s.toFixed(2); }
+function leerTiempo(txt) { txt = String(txt).trim().replace(",", "."); if (!txt) return null; const p = txt.split(":"); const v = p.length === 2 ? +p[0] * 60 + +p[1] : +p[0]; return isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : NaN; }
+function fFecha(f) { if (!f) return "—"; if (f.length === 4) return f; const [a, m, d] = f.split("-"); return `${+d}/${+m}/${a}`; }
+function temporada(f) { if (!f) return "?"; const a = +f.slice(0, 4); if (f.length === 4) return String(a); const m = +f.slice(5, 7); return m >= 9 ? `${a}-${String(a + 1).slice(2)}` : `${a - 1}-${String(a).slice(2)}`; }
+function hoyTemporada() { const d = new Date(); const f = d.toISOString().slice(0, 10); return temporada(f); }
+const clave = n => n.distancia + " " + n.estilo;
+const etiqueta = k => { const [d, e] = k.split(" "); return d + " " + NOMBRE_ESTILO[e]; };
+function ordenPruebas(ks) { return ks.sort((a, b) => { const [da, ea] = a.split(" "), [db, eb] = b.split(" "); return (+da - +db) || (ESTILOS.indexOf(ea) - ESTILOS.indexOf(eb)); }); }
+const oficial = n => n.tipo === "oficial" && n.tiempo != null;
+const chipPisc = p => p ? `<span class="chip p${p}">${p} m</span>` : `<span class="chip no">piscina ¿?</span>`;
+
+// mejor marca en su momento (por prueba y piscina)
+function marcarMejores() {
+  const orden = D.nadadas.slice().sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+  const mejor = {};
+  for (const n of orden) {
+    n._mm = false;
+    if (!oficial(n) || !n.piscina) continue;
+    const k = clave(n) + "|" + n.piscina;
+    if (mejor[k] == null || n.tiempo < mejor[k]) { n._mm = true; mejor[k] = n.tiempo; }
+  }
+}
+
+async function cargar() {
+  const r = await fetch("api/datos", { cache: "no-store" });
+  D = await r.json();
+  marcarMejores();
+  pintar();
+}
+async function post(ruta, datos) {
+  const r = await fetch(ruta, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || "No se pudo guardar");
+  return j;
+}
+function toast(txt) { const t = document.createElement("div"); t.className = "toast"; t.textContent = txt; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+
+function pintar() {
+  $("nombre").textContent = D.nombre || "natación";
+  document.title = "Tiempos de " + (D.nombre || "natación");
+  pintarEstado(); pintarAvisos(); pintarMarcas(); pintarEvol(); pintarHist();
+  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === tab));
+  document.querySelectorAll(".tab").forEach(s => s.hidden = s.id !== "tab-" + tab);
+}
+
+function pintarEstado() {
+  const e = D.estado || {};
+  const ult = e.ultima ? new Date(e.ultima).toLocaleString("es-ES", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : "nunca";
+  $("estado").innerHTML = `<span>${e.buscando ? "Buscando resultados…" : "Última búsqueda: " + ult}</span><span>${e.revisados || 0} PDF revisados · cada ${e.intervalo_min || 30} min</span>`
+    + (e.error ? `<span class="err" title="${esc(e.error)}">Hubo errores en la última búsqueda</span>` : "")
+    + `<button type="button" id="b-buscar">Buscar ahora</button>`;
+  $("b-buscar").onclick = async () => { await post("api/buscar", {}); toast("Buscando resultados nuevos"); setTimeout(cargar, 4000); setTimeout(cargar, 20000); };
+}
+
+function pintarAvisos() {
+  const sin = {};
+  D.nadadas.filter(n => !n.piscina && n.fecha && n.fecha.length === 10).forEach(n => { const k = n.fecha + "|" + n.competicion; sin[k] = sin[k] || { fecha: n.fecha, competicion: n.competicion, n: 0 }; sin[k].n++; });
+  const auto = {};
+  D.nadadas.filter(n => n.piscina && n.piscina_auto).forEach(n => { const k = n.fecha + "|" + n.competicion; auto[k] = auto[k] || { fecha: n.fecha, competicion: n.competicion, piscina: n.piscina }; });
+  const fila = (c, txt) => `<div class="aviso"><span>${txt}</span><span class="seg"><button type="button" data-f="${esc(c.fecha)}" data-c="${esc(c.competicion)}" data-p="25">25 m</button><button type="button" data-f="${esc(c.fecha)}" data-c="${esc(c.competicion)}" data-p="50">50 m</button></span></div>`;
+  $("avisos").innerHTML = Object.values(sin).sort((a, b) => b.fecha.localeCompare(a.fecha)).map(c => fila(c, `<b>${esc(c.competicion || "Competición")}</b> (${fFecha(c.fecha)}): ¿en qué piscina fue?`)).join("")
+    + Object.values(auto).map(c => fila(c, `<b>${esc(c.competicion)}</b> (${fFecha(c.fecha)}): he deducido piscina de ${c.piscina} m de sus bases. ¿Es correcto?`)).join("");
+  $("avisos").querySelectorAll("button").forEach(b => b.onclick = async () => {
+    await post("api/competicion", { fecha: b.dataset.f, competicion: b.dataset.c, piscina: +b.dataset.p });
+    toast(`Piscina de ${b.dataset.p} m guardada`); cargar();
+  });
+}
+
+function pintarMarcas() {
+  const temp = hoyTemporada();
+  const ks = ordenPruebas([...new Set(D.nadadas.map(clave))]);
+  const mejor = (k, f) => D.nadadas.filter(n => clave(n) === k && oficial(n) && f(n)).sort((a, b) => a.tiempo - b.tiempo)[0];
+  const deTemp = D.nadadas.filter(n => temporada(n.fecha) === temp);
+  const mmTemp = deTemp.filter(n => n._mm);
+  $("resumen").innerHTML = [
+    ["Temporada " + temp, deTemp.length + " nadadas", new Set(deTemp.map(n => n.fecha)).size + " competiciones"],
+    ["Mejores marcas", mmTemp.length + " esta temporada", mmTemp.map(n => etiqueta(clave(n))).join(", ") || "—"],
+    ["Historial", D.nadadas.length + " nadadas", "desde " + (D.nadadas.map(n => n.fecha).filter(Boolean).sort()[0] || "—").slice(0, 4)],
+  ].map(x => `<div><span class="k">${x[0]}</span><span class="v">${x[1]}</span><span class="d">${esc(x[2])}</span></div>`).join("");
+  const celda = n => n ? `<span class="t">${fmt(n.tiempo)}</span>${temporada(n.fecha) === temp ? ' <span class="chip mm">nueva</span>' : ""}<span class="sub">${fFecha(n.fecha)} · ${esc(n.competicion || n.ciudad || "")}</span>` : `<span class="sub">—</span>`;
+  let h = `<thead><tr><th>Prueba</th><th>Piscina de 25 m</th><th>Piscina de 50 m</th><th>Mejor de la temporada</th><th>Veces</th></tr></thead><tbody>`;
+  for (const k of ks) {
+    const b25 = mejor(k, n => n.piscina === 25), b50 = mejor(k, n => n.piscina === 50), bt = mejor(k, n => temporada(n.fecha) === temp);
+    const veces = D.nadadas.filter(n => clave(n) === k).length;
+    h += `<tr class="clic" data-k="${k}"><td><b>${etiqueta(k)}</b></td><td>${celda(b25)}</td><td>${celda(b50)}</td><td>${bt ? `<span class="t">${fmt(bt.tiempo)}</span> ${chipPisc(bt.piscina)}<span class="sub">${fFecha(bt.fecha)}</span>` : '<span class="sub">—</span>'}</td><td>${veces}</td></tr>`;
+  }
+  $("t-marcas").innerHTML = h + "</tbody>";
+  $("t-marcas").querySelectorAll("tr.clic").forEach(tr => tr.onclick = () => { evPrueba = tr.dataset.k; tab = "evolucion"; guardarUI(); pintar(); window.scrollTo(0, 0); });
+}
+
+function opcionesPrueba(sel, todas) {
+  const ks = ordenPruebas([...new Set(D.nadadas.map(clave))]);
+  const v = sel.value;
+  sel.innerHTML = (todas ? '<option value="">Todas</option>' : "") + ks.map(k => `<option value="${k}">${etiqueta(k)}</option>`).join("");
+  if ([...sel.options].some(o => o.value === v)) sel.value = v;
+  return ks;
+}
+
+function filaNadada(n, conPrueba) {
+  const extra = n.tipo !== "oficial" ? ` <span class="chip">${TIPOS[n.tipo]}</span>` : "";
+  return `<tr class="clic" data-id="${n.id}"><td>${fFecha(n.fecha)}</td>${conPrueba ? `<td><b>${etiqueta(clave(n))}</b></td>` : ""}<td><span class="t">${fmt(n.tiempo)}</span>${n._mm ? ' <span class="chip mm">MM</span>' : ""}${extra}${n.parciales && n.parciales.length > 2 ? ' <span class="chip">parciales</span>' : ""}</td><td>${chipPisc(n.piscina)}</td><td>${esc(n.competicion || "—")}<span class="sub">${esc(n.ciudad || "")}</span></td><td>${n.puesto ? n.puesto + "º" : "—"}<span class="sub">${esc(n.categoria || "")}</span></td></tr>`;
+}
+function enlazarFilas(tabla) { tabla.querySelectorAll("tr.clic").forEach(tr => tr.onclick = () => abrir(D.nadadas.find(n => n.id === tr.dataset.id))); }
+
+function pintarEvol() {
+  const ks = opcionesPrueba($("ev-prueba"), false);
+  if (!evPrueba || !ks.includes(evPrueba)) evPrueba = ks.includes("100 libre") ? "100 libre" : ks[0];
+  $("ev-prueba").value = evPrueba;
+  const otras = $("ev-otras").checked;
+  const lista = D.nadadas.filter(n => clave(n) === evPrueba && n.tiempo != null && (otras || n.tipo === "oficial")).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+  graficaEvol($("g-evol"), lista.filter(n => n.fecha && n.fecha.length === 10));
+  $("t-evol").innerHTML = `<thead><tr><th>Fecha</th><th>Tiempo</th><th>Piscina</th><th>Competición</th><th>Puesto</th></tr></thead><tbody>` + (lista.map(n => filaNadada(n, false)).join("") || `<tr><td colspan="5" class="vacio">Sin nadadas</td></tr>`) + "</tbody>";
+  enlazarFilas($("t-evol"));
+}
+
+const svgNS = "http://www.w3.org/2000/svg";
+function el(tag, at, padre) { const e = document.createElementNS(svgNS, tag); for (const k in at) { const v = String(at[k]); if (v.includes("var(")) e.style.setProperty(k, v); else e.setAttribute(k, v); } if (padre) padre.appendChild(e); return e; }
+function paso(r, n) { const raw = r / n, p = Math.pow(10, Math.floor(Math.log10(raw))), x = raw / p; return (x < 1.5 ? 1 : x < 3 ? 2 : x < 7 ? 5 : 10) * p; }
+
+function graficaEvol(host, lista) {
+  host.innerHTML = "";
+  if (lista.length < 1) { host.innerHTML = '<div class="vacio">Sin marcas con fecha en esta prueba</div>'; return; }
+  const W = Math.max(320, host.clientWidth || 700), H = W < 520 ? 250 : 320, m = { l: 52, r: 16, t: 14, b: 30 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const ts = lista.map(n => Date.parse(n.fecha)), vs = lista.map(n => n.tiempo);
+  let x0 = Math.min(...ts), x1 = Math.max(...ts); if (x1 - x0 < 864e5 * 60) { x0 -= 864e5 * 30; x1 += 864e5 * 30; }
+  const padx = (x1 - x0) * 0.03; x0 -= padx; x1 += padx;
+  let lo = Math.min(...vs), hi = Math.max(...vs); const pd = (hi - lo) * 0.1 || 1; lo -= pd; hi += pd;
+  const st = paso(hi - lo, 5); lo = Math.floor(lo / st) * st; hi = Math.ceil(hi / st) * st;
+  const X = t => m.l + (t - x0) / (x1 - x0) * iw, Y = v => m.t + (v - lo) / (hi - lo) * ih;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Evolución de " + etiqueta(evPrueba) }, host);
+  for (let v = lo; v <= hi + 1e-9; v += st) {
+    el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" }, svg);
+    el("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11.5 }, svg).textContent = fmt(v).replace(/\.00$/, "");
+  }
+  // marcas del eje x: una por temporada (1 de septiembre)
+  for (let a = new Date(x0).getFullYear() - 1; a <= new Date(x1).getFullYear(); a++) {
+    const t = Date.parse(a + "-09-01"); if (t < x0 || t > x1) continue;
+    el("line", { x1: X(t), x2: X(t), y1: m.t, y2: m.t + ih, stroke: "var(--line)", "stroke-dasharray": "3 4" }, svg);
+    el("text", { x: X(t) + 4, y: H - 9, fill: "var(--muted)", "font-size": 11.5 }, svg).textContent = `${a}-${String(a + 1).slice(2)}`;
+  }
+  for (const p of [25, 50]) {
+    const ser = lista.filter(n => n.piscina === p && n.tipo === "oficial").sort((a, b) => a.fecha.localeCompare(b.fecha));
+    if (ser.length > 1) el("polyline", { points: ser.map(n => X(Date.parse(n.fecha)) + "," + Y(n.tiempo)).join(" "), fill: "none", stroke: `var(--p${p})`, "stroke-width": 2, "stroke-linejoin": "round", opacity: .85 }, svg);
+  }
+  const puntos = lista.map(n => {
+    const c = n.piscina ? `var(--p${n.piscina})` : "var(--muted)";
+    const hueco = n.tipo !== "oficial";
+    const cx = X(Date.parse(n.fecha)), cy = Y(n.tiempo);
+    if (n._mm) el("circle", { cx, cy, r: 8, fill: "none", stroke: "var(--oro)", "stroke-width": 2 }, svg);
+    el("circle", { cx, cy, r: 4.5, fill: hueco ? "var(--panel)" : c, stroke: hueco ? c : "var(--panel)", "stroke-width": hueco ? 2 : 1.5 }, svg);
+    return { n, cx, cy };
+  });
+  const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; host.appendChild(tip);
+  const hit = el("rect", { x: 0, y: 0, width: W, height: H, fill: "transparent" }, svg);
+  let sel = null;
+  const mostrar = ev => {
+    const r = svg.getBoundingClientRect(), sx = (ev.clientX - r.left) * W / r.width, sy = (ev.clientY - r.top) * H / r.height;
+    let best = null, bd = 1e9; puntos.forEach(p => { const d = Math.hypot(p.cx - sx, (p.cy - sy) * .5); if (d < bd) { bd = d; best = p; } });
+    if (!best) return; sel = best;
+    tip.innerHTML = `<b>${fmt(best.n.tiempo)}</b>${best.n._mm ? " · mejor marca" : ""}<br><i>${fFecha(best.n.fecha)} · ${best.n.piscina ? best.n.piscina + " m" : "piscina ¿?"}${best.n.tipo !== "oficial" ? " · " + TIPOS[best.n.tipo] : ""}</i><br><i>${esc(best.n.competicion || "")}</i>`;
+    tip.hidden = false;
+    const tw = tip.offsetWidth; tip.style.left = Math.max(tw / 2, Math.min(r.width - tw / 2, best.cx * r.width / W)) + "px"; tip.style.top = Math.max(tip.offsetHeight, best.cy * r.height / H - 12) + "px";
+  };
+  hit.addEventListener("pointermove", mostrar); hit.addEventListener("pointerleave", () => tip.hidden = true);
+  hit.addEventListener("click", ev => { mostrar(ev); if (sel) abrir(sel.n); });
+}
+
+function pintarHist() {
+  const temps = [...new Set(D.nadadas.map(n => temporada(n.fecha)))].sort().reverse();
+  const st = $("h-temp"), v = st.value;
+  st.innerHTML = '<option value="">Todas</option>' + temps.map(t => `<option>${t}</option>`).join("");
+  if ([...st.options].some(o => o.value === v)) st.value = v;
+  opcionesPrueba($("h-prueba"), true);
+  const fT = st.value, fP = $("h-prueba").value, fPi = $("h-pisc").value;
+  const lista = D.nadadas.filter(n => (!fT || temporada(n.fecha) === fT) && (!fP || clave(n) === fP) && (!fPi || (fPi === "?" ? !n.piscina : n.piscina === +fPi)))
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || (a.distancia - b.distancia));
+  $("t-hist").innerHTML = `<thead><tr><th>Fecha</th><th>Prueba</th><th>Tiempo</th><th>Piscina</th><th>Competición</th><th>Puesto</th></tr></thead><tbody>` + (lista.map(n => filaNadada(n, true)).join("") || `<tr><td colspan="6" class="vacio">No hay nadadas con estos filtros</td></tr>`) + "</tbody>";
+  enlazarFilas($("t-hist"));
+}
+
+// ---------- ficha de una nadada (ver, corregir, ritmo) ----------
+function abrir(n) {
+  const nueva = !n;
+  n = n || { fecha: new Date().toISOString().slice(0, 10), tipo: "oficial", estilo: "libre", distancia: 100, piscina: 25, parciales: [] };
+  const opt = (vals, cur, nom) => vals.map(v => `<option value="${v}" ${String(v) === String(cur ?? "") ? "selected" : ""}>${nom ? nom(v) : v}</option>`).join("");
+  const anterior = D.nadadas.filter(x => x !== n && oficial(x) && x.piscina === n.piscina && clave(x) === clave(n) && String(x.fecha) < String(n.fecha)).sort((a, b) => a.tiempo - b.tiempo)[0];
+  $("dlg-body").innerHTML = `
+    <div class="dlg-head"><div>${nueva ? "<h2>Añadir nadada</h2>" : `<div class="t">${fmt(n.tiempo)}</div><div>${etiqueta(clave(n))} ${chipPisc(n.piscina)} ${n._mm ? '<span class="chip mm">mejor marca</span>' : ""}</div>
+      <div class="nota">${fFecha(n.fecha)} · ${esc(n.competicion || "")}${n.puesto ? " · " + n.puesto + "º " + esc(n.categoria || "") : ""}${n.puntos ? " · " + n.puntos + " puntos" : ""}${anterior && oficial(n) ? ` · ${(n.tiempo - anterior.tiempo > 0 ? "+" : "−") + Math.abs(n.tiempo - anterior.tiempo).toFixed(2)} s sobre la mejor anterior (${fmt(anterior.tiempo)})` : ""}</div>`}</div>
+      <button type="button" id="d-cerrar" aria-label="Cerrar">Cerrar</button></div>
+    ${!nueva && n.parciales && n.parciales.length > 2 ? `<div class="card"><div class="leyenda" style="justify-content:space-between"><b>Ritmo</b><span class="seg" id="d-paso"><button type="button" data-p="50">Cada 50 m</button><button type="button" data-p="100">Cada 100 m</button></span></div><div class="nota">Ritmo por 100 m de cada tramo. Más abajo es más rápido. El primer tramo incluye la salida.</div><div class="grafica" id="d-ritmo"></div><div class="tabla" id="d-ptabla"></div></div>` : ""}
+    <form class="campos" id="d-form">
+      <label>Fecha<input type="date" name="fecha" value="${n.fecha && n.fecha.length === 10 ? n.fecha : ""}" required></label>
+      <label>Distancia<select name="distancia">${opt([50, 100, 200, 400, 800, 1500], n.distancia)}</select></label>
+      <label>Estilo<select name="estilo">${opt(ESTILOS, n.estilo)}</select></label>
+      <label>Tiempo<input name="tiempo" inputmode="decimal" placeholder="1:12.89" value="${n.tiempo != null ? fmt(n.tiempo) : ""}"></label>
+      <label>Piscina<select name="piscina"><option value="">Sin indicar</option>${opt([25, 50], n.piscina, v => v + " m")}</select></label>
+      <label>Tipo<select name="tipo">${opt(Object.keys(TIPOS), n.tipo, v => TIPOS[v])}</select></label>
+      <label>Puesto<input name="puesto" inputmode="numeric" value="${n.puesto ?? ""}"></label>
+      <label class="ancho">Competición<input name="competicion" value="${esc(n.competicion || "")}"></label>
+      <label class="ancho">Nota<input name="nota" value="${esc(n.nota || "")}"></label>
+    </form>
+    <div class="botones"><span>${nueva ? "" : '<button type="button" class="peligro" id="d-borrar">Mover a la papelera</button>'}</span><button type="button" class="prim" id="d-guardar">${nueva ? "Añadir" : "Guardar cambios"}</button></div>
+    ${!nueva && n.origen ? `<div class="nota">Origen: ${n.origen === "numbers" ? "importada del Numbers" : n.origen === "manual" ? "alta manual" : esc(n.origen.split("/").pop())}</div>` : ""}`;
+  const dlg = $("dlg"); if (!dlg.open) dlg.showModal();
+  $("d-cerrar").onclick = () => dlg.close();
+  $("d-guardar").onclick = async () => {
+    const f = new FormData($("d-form")), d = Object.fromEntries(f.entries());
+    const t = leerTiempo(d.tiempo); if (Number.isNaN(t)) { toast("El tiempo va como 1:12.89 o 38.11"); return; }
+    d.tiempo = t; if (!d.fecha) { if (!nueva && n.fecha) d.fecha = n.fecha; else { toast("Falta la fecha"); return; } }
+    if (!nueva) d.id = n.id; else d.ciudad = "";
+    try { await post("api/nadada", d); dlg.close(); toast(nueva ? "Nadada añadida" : "Cambios guardados"); cargar(); } catch (e) { toast(e.message); }
+  };
+  if (!nueva) $("d-borrar").onclick = async () => {
+    try { await post("api/papelera", { id: n.id }); dlg.close(); cargar(); toastDeshacer(); } catch (e) { toast(e.message); }
+  };
+  if (!nueva && n.parciales && n.parciales.length > 2) {
+    const distancias = n.parciales.map(p => p[0]);
+    const puede50 = distancias.includes(50) && distancias.filter(d => d % 50 === 0).length === distancias.length;
+    let pasoSel = puede50 ? 50 : 100;
+    const btns = $("d-paso").querySelectorAll("button");
+    if (!puede50) btns[0].disabled = true;
+    const dibujar = () => { btns.forEach(b => b.setAttribute("aria-pressed", +b.dataset.p === pasoSel)); ritmo(n, pasoSel); };
+    btns.forEach(b => b.onclick = () => { pasoSel = +b.dataset.p; dibujar(); });
+    dibujar();
+  }
+}
+function toastDeshacer() {
+  const t = document.createElement("div"); t.className = "toast"; t.innerHTML = 'Movida a la papelera <button type="button" style="margin-left:10px">Deshacer</button>';
+  document.body.appendChild(t);
+  t.querySelector("button").onclick = async () => { t.remove(); await post("api/restaurar", {}); toast("Recuperada"); cargar(); };
+  setTimeout(() => t.remove(), 7000);
+}
+
+function tramos(n, p) {
+  const pts = [[0, 0]].concat(n.parciales.filter(x => x[0] % p === 0 || x[0] === n.distancia));
+  const out = [];
+  for (let i = 1; i < pts.length; i++) { const largo = pts[i][0] - pts[i - 1][0]; const t = +(pts[i][1] - pts[i - 1][1]).toFixed(2); out.push({ desde: pts[i - 1][0], hasta: pts[i][0], t, ritmo: t * 100 / largo, acum: pts[i][1] }); }
+  return out;
+}
+function ritmo(n, p) {
+  const host = $("d-ritmo"); host.innerHTML = "";
+  const tr = tramos(n, p), media = n.tiempo * 100 / n.distancia;
+  const W = Math.max(300, host.clientWidth || 600), H = 220, m = { l: 48, r: 12, t: 10, b: 26 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const vs = tr.map(x => x.ritmo).concat([media]);
+  let lo = Math.min(...vs), hi = Math.max(...vs); const pd = (hi - lo) * .1 || 1; lo -= pd; hi += pd; const st = paso(hi - lo, 4); lo = Math.floor(lo / st) * st; hi = Math.ceil(hi / st) * st;
+  const X = d => m.l + d / n.distancia * iw, Y = v => m.t + (v - lo) / (hi - lo) * ih;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Ritmo por tramos" }, host);
+  for (let v = lo; v <= hi + 1e-9; v += st) { el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" }, svg); el("text", { x: m.l - 6, y: Y(v) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11 }, svg).textContent = fmt(v).replace(/\.00$/, ""); }
+  const marcas = n.distancia >= 800 ? 300 : n.distancia >= 400 ? 100 : 50;
+  for (let d = 0; d <= n.distancia; d += marcas) el("text", { x: X(d), y: H - 7, "text-anchor": d === 0 ? "start" : d === n.distancia ? "end" : "middle", fill: "var(--muted)", "font-size": 11 }, svg).textContent = d + (d === n.distancia ? " m" : "");
+  el("line", { x1: m.l, x2: W - m.r, y1: Y(media), y2: Y(media), stroke: "var(--muted)", "stroke-dasharray": "5 4", "stroke-width": 1.5 }, svg);
+  const pts = tr.map(x => [X(x.hasta), Y(x.ritmo)]);
+  el("polyline", { points: pts.map(q => q.join(",")).join(" "), fill: "none", stroke: "var(--oro)", "stroke-width": 2.5, "stroke-linejoin": "round" }, svg);
+  pts.forEach(q => el("circle", { cx: q[0], cy: q[1], r: 3.5, fill: "var(--oro)", stroke: "var(--panel)", "stroke-width": 1.5 }, svg));
+  const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; host.appendChild(tip);
+  const hit = el("rect", { x: m.l, y: 0, width: iw, height: H, fill: "transparent" }, svg);
+  hit.addEventListener("pointermove", ev => {
+    const r = svg.getBoundingClientRect(), sx = (ev.clientX - r.left) * W / r.width;
+    let i = 0, bd = 1e9; pts.forEach((q, j) => { const d = Math.abs(q[0] - sx); if (d < bd) { bd = d; i = j; } });
+    const x = tr[i]; tip.innerHTML = `<b>${x.desde}–${x.hasta} m</b><br>${fmt(x.t)} <i>(${fmt(x.ritmo)} /100)</i><br><i>Paso: ${fmt(x.acum)}</i>`; tip.hidden = false;
+    const tw = tip.offsetWidth; tip.style.left = Math.max(tw / 2, Math.min(r.width - tw / 2, pts[i][0] * r.width / W)) + "px"; tip.style.top = Math.max(tip.offsetHeight, pts[i][1] * r.height / H - 10) + "px";
+  });
+  hit.addEventListener("pointerleave", () => tip.hidden = true);
+  $("d-ptabla").innerHTML = `<table><thead><tr><th>Tramo</th><th>Parcial</th><th>Ritmo /100</th><th>Paso</th><th>vs media</th></tr></thead><tbody>` +
+    tr.map(x => { const dv = x.ritmo - media; return `<tr><td>${x.desde}–${x.hasta} m</td><td class="t">${fmt(x.t)}</td><td>${fmt(x.ritmo)}</td><td>${fmt(x.acum)}</td><td style="color:var(--${dv > 0 ? "mal" : "ok"})">${(dv > 0 ? "+" : "−") + Math.abs(dv).toFixed(2)}</td></tr>`; }).join("") + "</tbody></table>";
+}
+
+function guardarUI() { try { localStorage.setItem("tiempos-ui", JSON.stringify({ tab, ev: evPrueba })); } catch (e) {} }
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => { tab = b.dataset.tab; guardarUI(); pintar(); });
+$("ev-prueba").onchange = e => { evPrueba = e.target.value; guardarUI(); pintarEvol(); };
+$("ev-otras").onchange = pintarEvol;
+["h-temp", "h-prueba", "h-pisc"].forEach(id => $(id).onchange = pintarHist);
+$("b-nueva").onclick = () => abrir(null);
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (tab === "evolucion") pintarEvol(); }, 150); });
+cargar().catch(() => { document.querySelector(".wrap").insertAdjacentHTML("beforeend", '<div class="vacio">No puedo leer los datos de la app. Recarga la página.</div>'); });
+setInterval(() => { if (!$("dlg").open) cargar(); }, 120000);
+</script>
+</body>
+</html>

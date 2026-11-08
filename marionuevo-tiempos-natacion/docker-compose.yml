@@ -1,0 +1,30 @@
+version: "3.7"
+
+services:
+  # La web queda detrás del login de Umbrel: lleva marcas y nombres.
+  app_proxy:
+    environment:
+      APP_HOST: marionuevo-tiempos-natacion_tiempos_1
+      APP_PORT: 8080
+
+  tiempos:
+    # La misma imagen que Vigía Fedecanat y Guía de jornada.
+    image: python:3.13.7-alpine3.22@sha256:9ba6d8cbebf0fb6546ae71f2a1c14f6ffd2fdab83af7fa5669734ef30ad48844
+    restart: unless-stopped
+    stop_grace_period: 5s
+    # Arranca como root solo para instalar pdftotext (poppler-utils); la app corre como
+    # el usuario 1000 (umbrel), dueño de data/.
+    command:
+      - sh
+      - -c
+      - >-
+        apk add --no-cache poppler-utils >/dev/null 2>&1 || echo "No se pudo instalar poppler-utils";
+        adduser -D -H -u 1000 app 2>/dev/null;
+        exec su -m -s /bin/sh app -c "exec python -I /app/tiempos.py"
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ${APP_DATA_DIR}/tiempos.py:/app/tiempos.py:ro
+      - ${APP_DATA_DIR}/www:/app/www:ro
+      # config.json, nadadas.json, papelera.json y estado.json: no están en git (datos personales)
+      - ${APP_DATA_DIR}/data:/data

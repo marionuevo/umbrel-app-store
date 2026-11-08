@@ -11,3 +11,7 @@ __pycache__/
 # Guía de jornada: config, jornada (nombres de nadadores) y estado, solo en el Umbrel
 marionuevo-guia-natacion/data/*.json
 marionuevo-guia-natacion/data/*.tmp
+
+# Tiempos de natación: config (nombres, webhook), nadadas, papelera y estado, solo en el Umbrel
+marionuevo-tiempos-natacion/data/*.json
+marionuevo-tiempos-natacion/data/*.tmp
