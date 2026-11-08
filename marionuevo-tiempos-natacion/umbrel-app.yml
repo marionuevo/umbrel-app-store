@@ -3,7 +3,7 @@ id: marionuevo-tiempos-natacion
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-tiempos-natacion/icon.svg
 category: automation
 name: Tiempos de natación
-version: "1.1.0"
+version: "1.1.1"
 tagline: Historial de marcas de una nadadora, con los resultados oficiales al día
 description: >
   Guarda cada prueba nadada (fecha, competición, piscina de 25 o 50 m, tiempo,
@@ -26,6 +26,7 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
+  Gráficas con el tiempo creciendo hacia arriba (lo más rápido, abajo).
   Puntos AQUA de World Aquatics y tiempo equivalente entre piscinas de 25 y 50 m
   (evolución en tiempo real, equivalente o puntos). Tiempos tomados a mano, por
   ejemplo en descalificaciones.

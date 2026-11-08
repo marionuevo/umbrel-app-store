@@ -290,7 +290,7 @@ function graficaEvol(host, lista) {
   const padx = (x1 - x0) * 0.03; x0 -= padx; x1 += padx;
   let lo = Math.min(...vs), hi = Math.max(...vs); const pd = (hi - lo) * 0.1 || 1; lo -= pd; hi += pd;
   const st = paso(hi - lo, 5); lo = Math.floor(lo / st) * st; hi = Math.ceil(hi / st) * st;
-  const X = t => m.l + (t - x0) / (x1 - x0) * iw, Y = v => alto ? m.t + (hi - v) / (hi - lo) * ih : m.t + (v - lo) / (hi - lo) * ih;
+  const X = t => m.l + (t - x0) / (x1 - x0) * iw, Y = v => m.t + (hi - v) / (hi - lo) * ih;   // el valor crece hacia arriba
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Evolución de " + etiqueta(evPrueba) }, host);
   for (let v = lo; v <= hi + 1e-9; v += st) {
     el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" }, svg);
@@ -420,7 +420,7 @@ function ritmo(n, p) {
   const W = Math.max(300, host.clientWidth || 600), H = 220, m = { l: 48, r: 12, t: 10, b: 26 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
   const vs = tr.map(x => x.ritmo).concat([media]);
   let lo = Math.min(...vs), hi = Math.max(...vs); const pd = (hi - lo) * .1 || 1; lo -= pd; hi += pd; const st = paso(hi - lo, 4); lo = Math.floor(lo / st) * st; hi = Math.ceil(hi / st) * st;
-  const X = d => m.l + d / n.distancia * iw, Y = v => m.t + (v - lo) / (hi - lo) * ih;
+  const X = d => m.l + d / n.distancia * iw, Y = v => m.t + (hi - v) / (hi - lo) * ih;   // el tiempo crece hacia arriba
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Ritmo por tramos" }, host);
   for (let v = lo; v <= hi + 1e-9; v += st) { el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" }, svg); el("text", { x: m.l - 6, y: Y(v) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11 }, svg).textContent = fmt(v).replace(/\.00$/, ""); }
   const marcas = n.distancia >= 800 ? 300 : n.distancia >= 400 ? 100 : 50;
