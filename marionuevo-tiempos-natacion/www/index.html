@@ -106,18 +106,19 @@ form.campos label.ancho { grid-column: 1 / -1; }
 
   <section id="tab-marcas" class="tab" style="display:grid;gap:16px">
     <div class="resumen" id="resumen"></div>
-    <div class="nota">Solo cuentan las marcas oficiales: los relevos, los parciales y las descalificaciones no son mejor marca. Toca una prueba para ver su evolución.</div>
+    <div class="nota">Solo cuentan las marcas oficiales: los relevos, los parciales, las descalificaciones y los tiempos a mano no son mejor marca. Los puntos AQUA (World Aquatics) comparan piscinas de 25 y 50 m: a igualdad de puntos, los tiempos son equivalentes. Toca una prueba para ver su evolución.</div>
     <div class="tabla"><table id="t-marcas"></table></div>
   </section>
 
   <section id="tab-evolucion" class="tab" hidden style="display:grid;gap:14px">
     <div class="filtros">
       <label for="ev-prueba">Prueba <select id="ev-prueba"></select></label>
-      <label><input type="checkbox" id="ev-otras"> Ver también parciales y relevos</label>
+      <label for="ev-ver">Ver <select id="ev-ver"><option value="real">Tiempo real</option><option value="25">Equivalente en 25 m</option><option value="50">Equivalente en 50 m</option><option value="pts">Puntos AQUA</option></select></label>
+      <label><input type="checkbox" id="ev-otras"> Ver también parciales, relevos y tiempos a mano</label>
     </div>
     <div class="card">
       <div class="leyenda"><span><i style="background:var(--p25)"></i>Piscina de 25 m</span><span><i style="background:var(--p50)"></i>Piscina de 50 m</span><span><i style="background:var(--oro)"></i>Mejor marca en su momento</span></div>
-      <div class="nota">Más abajo es más rápido.</div>
+      <div class="nota" id="ev-nota">Más abajo es más rápido.</div>
       <div class="grafica" id="g-evol"></div>
     </div>
     <div class="tabla"><table id="t-evol"></table></div>
@@ -141,8 +142,11 @@ form.campos label.ancho { grid-column: 1 / -1; }
 const ESTILOS = ["mariposa", "espalda", "braza", "libre", "estilos"];
 const NOMBRE_ESTILO = { libre: "libre", espalda: "espalda", braza: "braza", mariposa: "mariposa", estilos: "estilos" };
 const TIPOS = { oficial: "Oficial", parcial: "Parcial", relevo: "Relevo", dsq: "Descalificada" };
-let D = { nadadas: [], estado: {} }, tab = "marcas", evPrueba = null;
-try { const s = JSON.parse(localStorage.getItem("tiempos-ui") || "{}"); tab = s.tab || tab; evPrueba = s.ev || null; } catch (e) {}
+let D = { nadadas: [], estado: {} }, tab = "marcas", evPrueba = null, evVer = "real";
+try { const s = JSON.parse(localStorage.getItem("tiempos-ui") || "{}"); tab = s.tab || tab; evPrueba = s.ev || null; evVer = s.ver || evVer; } catch (e) {}
+const otra = p => p === 25 ? 50 : 25;
+const pts = n => n._pts != null ? `${n._pts} pts` : "";
+const equiv = n => n.piscina && n._eq && n._eq[otra(n.piscina)] ? `≈ ${fmt(n._eq[otra(n.piscina)])} en ${otra(n.piscina)} m` : "";
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -154,7 +158,7 @@ function hoyTemporada() { const d = new Date(); const f = d.toISOString().slice(
 const clave = n => n.distancia + " " + n.estilo;
 const etiqueta = k => { const [d, e] = k.split(" "); return d + " " + NOMBRE_ESTILO[e]; };
 function ordenPruebas(ks) { return ks.sort((a, b) => { const [da, ea] = a.split(" "), [db, eb] = b.split(" "); return (+da - +db) || (ESTILOS.indexOf(ea) - ESTILOS.indexOf(eb)); }); }
-const oficial = n => n.tipo === "oficial" && n.tiempo != null;
+const oficial = n => n.tipo === "oficial" && n.tiempo != null && !n.a_mano;
 const chipPisc = p => p ? `<span class="chip p${p}">${p} m</span>` : `<span class="chip no">piscina ¿?</span>`;
 
 // mejor marca en su momento (por prueba y piscina)
@@ -225,12 +229,15 @@ function pintarMarcas() {
     ["Mejores marcas", mmTemp.length + " esta temporada", mmTemp.map(n => etiqueta(clave(n))).join(", ") || "—"],
     ["Historial", D.nadadas.length + " nadadas", "desde " + (D.nadadas.map(n => n.fecha).filter(Boolean).sort()[0] || "—").slice(0, 4)],
   ].map(x => `<div><span class="k">${x[0]}</span><span class="v">${x[1]}</span><span class="d">${esc(x[2])}</span></div>`).join("");
-  const celda = n => n ? `<span class="t">${fmt(n.tiempo)}</span>${temporada(n.fecha) === temp ? ' <span class="chip mm">nueva</span>' : ""}<span class="sub">${fFecha(n.fecha)} · ${esc(n.competicion || n.ciudad || "")}</span>` : `<span class="sub">—</span>`;
-  let h = `<thead><tr><th>Prueba</th><th>Piscina de 25 m</th><th>Piscina de 50 m</th><th>Mejor de la temporada</th><th>Veces</th></tr></thead><tbody>`;
+  const celda = n => n ? `<span class="t">${fmt(n.tiempo)}</span>${temporada(n.fecha) === temp ? ' <span class="chip mm">nueva</span>' : ""}<span class="sub">${[pts(n), fFecha(n.fecha), esc(n.competicion || n.ciudad || "")].filter(Boolean).join(" · ")}</span>` : `<span class="sub">—</span>`;
+  const mejorPts = k => D.nadadas.filter(n => clave(n) === k && oficial(n) && n._pts != null).sort((a, b) => b._pts - a._pts)[0];
+  let h = `<thead><tr><th>Prueba</th><th>Piscina de 25 m</th><th>Piscina de 50 m</th><th>Mejor en puntos AQUA</th><th>Mejor de la temporada</th><th>Veces</th></tr></thead><tbody>`;
   for (const k of ks) {
     const b25 = mejor(k, n => n.piscina === 25), b50 = mejor(k, n => n.piscina === 50), bt = mejor(k, n => temporada(n.fecha) === temp);
     const veces = D.nadadas.filter(n => clave(n) === k).length;
-    h += `<tr class="clic" data-k="${k}"><td><b>${etiqueta(k)}</b></td><td>${celda(b25)}</td><td>${celda(b50)}</td><td>${bt ? `<span class="t">${fmt(bt.tiempo)}</span> ${chipPisc(bt.piscina)}<span class="sub">${fFecha(bt.fecha)}</span>` : '<span class="sub">—</span>'}</td><td>${veces}</td></tr>`;
+    const bp = mejorPts(k);
+    const cPts = bp ? `<span class="t">${bp._pts} pts</span> ${chipPisc(bp.piscina)}<span class="sub">${fmt(bp.tiempo)} ${equiv(bp)}</span>` : '<span class="sub">—</span>';
+    h += `<tr class="clic" data-k="${k}"><td><b>${etiqueta(k)}</b></td><td>${celda(b25)}</td><td>${celda(b50)}</td><td>${cPts}</td><td>${bt ? `<span class="t">${fmt(bt.tiempo)}</span> ${chipPisc(bt.piscina)}<span class="sub">${fFecha(bt.fecha)}</span>` : '<span class="sub">—</span>'}</td><td>${veces}</td></tr>`;
   }
   $("t-marcas").innerHTML = h + "</tbody>";
   $("t-marcas").querySelectorAll("tr.clic").forEach(tr => tr.onclick = () => { evPrueba = tr.dataset.k; tab = "evolucion"; guardarUI(); pintar(); window.scrollTo(0, 0); });
@@ -245,8 +252,8 @@ function opcionesPrueba(sel, todas) {
 }
 
 function filaNadada(n, conPrueba) {
-  const extra = n.tipo !== "oficial" ? ` <span class="chip">${TIPOS[n.tipo]}</span>` : "";
-  return `<tr class="clic" data-id="${n.id}"><td>${fFecha(n.fecha)}</td>${conPrueba ? `<td><b>${etiqueta(clave(n))}</b></td>` : ""}<td><span class="t">${fmt(n.tiempo)}</span>${n._mm ? ' <span class="chip mm">MM</span>' : ""}${extra}${n.parciales && n.parciales.length > 2 ? ' <span class="chip">parciales</span>' : ""}</td><td>${chipPisc(n.piscina)}</td><td>${esc(n.competicion || "—")}<span class="sub">${esc(n.ciudad || "")}</span></td><td>${n.puesto ? n.puesto + "º" : "—"}<span class="sub">${esc(n.categoria || "")}</span></td></tr>`;
+  const extra = (n.tipo !== "oficial" ? ` <span class="chip">${TIPOS[n.tipo]}</span>` : "") + (n.a_mano ? ' <span class="chip">a mano</span>' : "");
+  return `<tr class="clic" data-id="${n.id}"><td>${fFecha(n.fecha)}</td>${conPrueba ? `<td><b>${etiqueta(clave(n))}</b></td>` : ""}<td><span class="t">${fmt(n.tiempo)}</span>${n._mm ? ' <span class="chip mm">MM</span>' : ""}${extra}${n.parciales && n.parciales.length > 2 ? ' <span class="chip">parciales</span>' : ""}</td><td>${chipPisc(n.piscina)}<span class="sub">${[pts(n), equiv(n)].filter(Boolean).join(" · ")}</span></td><td>${esc(n.competicion || "—")}<span class="sub">${esc(n.ciudad || "")}</span></td><td>${n.puesto ? n.puesto + "º" : "—"}<span class="sub">${esc(n.categoria || "")}</span></td></tr>`;
 }
 function enlazarFilas(tabla) { tabla.querySelectorAll("tr.clic").forEach(tr => tr.onclick = () => abrir(D.nadadas.find(n => n.id === tr.dataset.id))); }
 
@@ -255,12 +262,19 @@ function pintarEvol() {
   if (!evPrueba || !ks.includes(evPrueba)) evPrueba = ks.includes("100 libre") ? "100 libre" : ks[0];
   $("ev-prueba").value = evPrueba;
   const otras = $("ev-otras").checked;
+  $("ev-ver").value = evVer;
+  $("ev-nota").textContent = evVer === "pts" ? "Puntos AQUA con las tablas vigentes de World Aquatics. Más arriba es mejor." : evVer === "real" ? "Más abajo es más rápido." : `Cada tiempo pasado a piscina de ${evVer} m con los puntos AQUA (mismo número de puntos). Más abajo es más rápido.`;
   const lista = D.nadadas.filter(n => clave(n) === evPrueba && n.tiempo != null && (otras || n.tipo === "oficial")).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
-  graficaEvol($("g-evol"), lista.filter(n => n.fecha && n.fecha.length === 10));
+  graficaEvol($("g-evol"), lista.filter(n => n.fecha && n.fecha.length === 10 && valorEvol(n) != null));
   $("t-evol").innerHTML = `<thead><tr><th>Fecha</th><th>Tiempo</th><th>Piscina</th><th>Competición</th><th>Puesto</th></tr></thead><tbody>` + (lista.map(n => filaNadada(n, false)).join("") || `<tr><td colspan="5" class="vacio">Sin nadadas</td></tr>`) + "</tbody>";
   enlazarFilas($("t-evol"));
 }
 
+function valorEvol(n) {
+  if (evVer === "real") return n.tiempo;
+  if (evVer === "pts") return n._pts;
+  return n._eq ? n._eq[evVer] : null;
+}
 const svgNS = "http://www.w3.org/2000/svg";
 function el(tag, at, padre) { const e = document.createElementNS(svgNS, tag); for (const k in at) { const v = String(at[k]); if (v.includes("var(")) e.style.setProperty(k, v); else e.setAttribute(k, v); } if (padre) padre.appendChild(e); return e; }
 function paso(r, n) { const raw = r / n, p = Math.pow(10, Math.floor(Math.log10(raw))), x = raw / p; return (x < 1.5 ? 1 : x < 3 ? 2 : x < 7 ? 5 : 10) * p; }
@@ -270,16 +284,17 @@ function graficaEvol(host, lista) {
   if (lista.length < 1) { host.innerHTML = '<div class="vacio">Sin marcas con fecha en esta prueba</div>'; return; }
   const W = Math.max(320, host.clientWidth || 700), H = W < 520 ? 250 : 320, m = { l: 52, r: 16, t: 14, b: 30 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
-  const ts = lista.map(n => Date.parse(n.fecha)), vs = lista.map(n => n.tiempo);
+  const ts = lista.map(n => Date.parse(n.fecha)), vs = lista.map(valorEvol), alto = evVer === "pts";
+  const fv = v => alto ? String(Math.round(v)) : fmt(v).replace(/\.00$/, "");
   let x0 = Math.min(...ts), x1 = Math.max(...ts); if (x1 - x0 < 864e5 * 60) { x0 -= 864e5 * 30; x1 += 864e5 * 30; }
   const padx = (x1 - x0) * 0.03; x0 -= padx; x1 += padx;
   let lo = Math.min(...vs), hi = Math.max(...vs); const pd = (hi - lo) * 0.1 || 1; lo -= pd; hi += pd;
   const st = paso(hi - lo, 5); lo = Math.floor(lo / st) * st; hi = Math.ceil(hi / st) * st;
-  const X = t => m.l + (t - x0) / (x1 - x0) * iw, Y = v => m.t + (v - lo) / (hi - lo) * ih;
+  const X = t => m.l + (t - x0) / (x1 - x0) * iw, Y = v => alto ? m.t + (hi - v) / (hi - lo) * ih : m.t + (v - lo) / (hi - lo) * ih;
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Evolución de " + etiqueta(evPrueba) }, host);
   for (let v = lo; v <= hi + 1e-9; v += st) {
     el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)" }, svg);
-    el("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11.5 }, svg).textContent = fmt(v).replace(/\.00$/, "");
+    el("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11.5 }, svg).textContent = fv(v);
   }
   // marcas del eje x: una por temporada (1 de septiembre)
   for (let a = new Date(x0).getFullYear() - 1; a <= new Date(x1).getFullYear(); a++) {
@@ -287,15 +302,21 @@ function graficaEvol(host, lista) {
     el("line", { x1: X(t), x2: X(t), y1: m.t, y2: m.t + ih, stroke: "var(--line)", "stroke-dasharray": "3 4" }, svg);
     el("text", { x: X(t) + 4, y: H - 9, fill: "var(--muted)", "font-size": 11.5 }, svg).textContent = `${a}-${String(a + 1).slice(2)}`;
   }
-  for (const p of [25, 50]) {
-    const ser = lista.filter(n => n.piscina === p && n.tipo === "oficial").sort((a, b) => a.fecha.localeCompare(b.fecha));
-    if (ser.length > 1) el("polyline", { points: ser.map(n => X(Date.parse(n.fecha)) + "," + Y(n.tiempo)).join(" "), fill: "none", stroke: `var(--p${p})`, "stroke-width": 2, "stroke-linejoin": "round", opacity: .85 }, svg);
+  // tiempo real: una línea por piscina; equivalentes y puntos: una sola línea, porque ya son comparables
+  const grupos = evVer === "real" ? [[25, "var(--p25)"], [50, "var(--p50)"]] : [[null, "var(--fg2)"]];
+  for (const [p, color] of grupos) {
+    const ser = lista.filter(n => (p == null || n.piscina === p) && oficial(n)).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    if (ser.length > 1) el("polyline", { points: ser.map(n => X(Date.parse(n.fecha)) + "," + Y(valorEvol(n))).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", opacity: .85 }, svg);
   }
+  // mejor en su momento: por piscina en tiempo real; entre las dos piscinas en equivalentes y puntos
+  const mejorHasta = new Set(); let mejorP = -1;
+  if (evVer !== "real") lista.filter(oficial).sort((a, b) => a.fecha.localeCompare(b.fecha)).forEach(n => { if (n._pts != null && n._pts > mejorP) { mejorP = n._pts; mejorHasta.add(n); } });
+  const anillo = n => evVer === "real" ? n._mm : mejorHasta.has(n);
   const puntos = lista.map(n => {
     const c = n.piscina ? `var(--p${n.piscina})` : "var(--muted)";
-    const hueco = n.tipo !== "oficial";
-    const cx = X(Date.parse(n.fecha)), cy = Y(n.tiempo);
-    if (n._mm) el("circle", { cx, cy, r: 8, fill: "none", stroke: "var(--oro)", "stroke-width": 2 }, svg);
+    const hueco = !oficial(n);
+    const cx = X(Date.parse(n.fecha)), cy = Y(valorEvol(n));
+    if (anillo(n)) el("circle", { cx, cy, r: 8, fill: "none", stroke: "var(--oro)", "stroke-width": 2 }, svg);
     el("circle", { cx, cy, r: 4.5, fill: hueco ? "var(--panel)" : c, stroke: hueco ? c : "var(--panel)", "stroke-width": hueco ? 2 : 1.5 }, svg);
     return { n, cx, cy };
   });
@@ -306,7 +327,8 @@ function graficaEvol(host, lista) {
     const r = svg.getBoundingClientRect(), sx = (ev.clientX - r.left) * W / r.width, sy = (ev.clientY - r.top) * H / r.height;
     let best = null, bd = 1e9; puntos.forEach(p => { const d = Math.hypot(p.cx - sx, (p.cy - sy) * .5); if (d < bd) { bd = d; best = p; } });
     if (!best) return; sel = best;
-    tip.innerHTML = `<b>${fmt(best.n.tiempo)}</b>${best.n._mm ? " · mejor marca" : ""}<br><i>${fFecha(best.n.fecha)} · ${best.n.piscina ? best.n.piscina + " m" : "piscina ¿?"}${best.n.tipo !== "oficial" ? " · " + TIPOS[best.n.tipo] : ""}</i><br><i>${esc(best.n.competicion || "")}</i>`;
+    const v = valorEvol(best.n);
+    tip.innerHTML = `<b>${evVer === "pts" ? v + " pts" : fmt(v)}</b>${evVer !== "real" && evVer !== "pts" && best.n.piscina !== +evVer ? ` <i>(${fmt(best.n.tiempo)} en ${best.n.piscina} m)</i>` : ""}${anillo(best.n) ? " · mejor" : ""}${best.n._pts != null && evVer !== "pts" ? ` · ${best.n._pts} pts` : ""}<br><i>${fFecha(best.n.fecha)} · ${best.n.piscina ? best.n.piscina + " m" : "piscina ¿?"}${best.n.tipo !== "oficial" ? " · " + TIPOS[best.n.tipo] : ""}</i><br><i>${esc(best.n.competicion || "")}</i>`;
     tip.hidden = false;
     const tw = tip.offsetWidth; tip.style.left = Math.max(tw / 2, Math.min(r.width - tw / 2, best.cx * r.width / W)) + "px"; tip.style.top = Math.max(tip.offsetHeight, best.cy * r.height / H - 12) + "px";
   };
@@ -334,7 +356,8 @@ function abrir(n) {
   const opt = (vals, cur, nom) => vals.map(v => `<option value="${v}" ${String(v) === String(cur ?? "") ? "selected" : ""}>${nom ? nom(v) : v}</option>`).join("");
   const anterior = D.nadadas.filter(x => x !== n && oficial(x) && x.piscina === n.piscina && clave(x) === clave(n) && String(x.fecha) < String(n.fecha)).sort((a, b) => a.tiempo - b.tiempo)[0];
   $("dlg-body").innerHTML = `
-    <div class="dlg-head"><div>${nueva ? "<h2>Añadir nadada</h2>" : `<div class="t">${fmt(n.tiempo)}</div><div>${etiqueta(clave(n))} ${chipPisc(n.piscina)} ${n._mm ? '<span class="chip mm">mejor marca</span>' : ""}</div>
+    <div class="dlg-head"><div>${nueva ? "<h2>Añadir nadada</h2>" : `<div class="t">${fmt(n.tiempo)}</div><div>${etiqueta(clave(n))} ${chipPisc(n.piscina)} ${n._mm ? '<span class="chip mm">mejor marca</span>' : ""}${n.a_mano ? ' <span class="chip">tiempo a mano</span>' : ""}</div>
+      ${n._pts != null ? `<div>${n._pts} puntos AQUA${equiv(n) ? " · " + equiv(n) : ""}</div>` : ""}
       <div class="nota">${fFecha(n.fecha)} · ${esc(n.competicion || "")}${n.puesto ? " · " + n.puesto + "º " + esc(n.categoria || "") : ""}${n.puntos ? " · " + n.puntos + " puntos" : ""}${anterior && oficial(n) ? ` · ${(n.tiempo - anterior.tiempo > 0 ? "+" : "−") + Math.abs(n.tiempo - anterior.tiempo).toFixed(2)} s sobre la mejor anterior (${fmt(anterior.tiempo)})` : ""}</div>`}</div>
       <button type="button" id="d-cerrar" aria-label="Cerrar">Cerrar</button></div>
     ${!nueva && n.parciales && n.parciales.length > 2 ? `<div class="card"><div class="leyenda" style="justify-content:space-between"><b>Ritmo</b><span class="seg" id="d-paso"><button type="button" data-p="50">Cada 50 m</button><button type="button" data-p="100">Cada 100 m</button></span></div><div class="nota">Ritmo por 100 m de cada tramo. Más abajo es más rápido. El primer tramo incluye la salida.</div><div class="grafica" id="d-ritmo"></div><div class="tabla" id="d-ptabla"></div></div>` : ""}
@@ -346,15 +369,19 @@ function abrir(n) {
       <label>Piscina<select name="piscina"><option value="">Sin indicar</option>${opt([25, 50], n.piscina, v => v + " m")}</select></label>
       <label>Tipo<select name="tipo">${opt(Object.keys(TIPOS), n.tipo, v => TIPOS[v])}</select></label>
       <label>Puesto<input name="puesto" inputmode="numeric" value="${n.puesto ?? ""}"></label>
+      <label class="ancho" style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-size:14px;color:var(--fg2)"><input type="checkbox" name="a_mano" id="d-amano" ${n.a_mano ? "checked" : ""}> Tiempo tomado a mano (no oficial: no cuenta como mejor marca y no lo cambia la federación)</label>
       <label class="ancho">Competición<input name="competicion" value="${esc(n.competicion || "")}"></label>
       <label class="ancho">Nota<input name="nota" value="${esc(n.nota || "")}"></label>
     </form>
     <div class="botones"><span>${nueva ? "" : '<button type="button" class="peligro" id="d-borrar">Mover a la papelera</button>'}</span><button type="button" class="prim" id="d-guardar">${nueva ? "Añadir" : "Guardar cambios"}</button></div>
     ${!nueva && n.origen ? `<div class="nota">Origen: ${n.origen === "numbers" ? "importada del Numbers" : n.origen === "manual" ? "alta manual" : esc(n.origen.split("/").pop())}</div>` : ""}`;
   const dlg = $("dlg"); if (!dlg.open) dlg.showModal();
+  // una descalificada no tiene tiempo oficial: si se apunta uno, es tomado a mano
+  $("d-form").elements.tipo.onchange = e => { if (e.target.value === "dsq") $("d-amano").checked = true; };
   $("d-cerrar").onclick = () => dlg.close();
   $("d-guardar").onclick = async () => {
     const f = new FormData($("d-form")), d = Object.fromEntries(f.entries());
+    d.a_mano = $("d-amano").checked;
     const t = leerTiempo(d.tiempo); if (Number.isNaN(t)) { toast("El tiempo va como 1:12.89 o 38.11"); return; }
     d.tiempo = t; if (!d.fecha) { if (!nueva && n.fecha) d.fecha = n.fecha; else { toast("Falta la fecha"); return; } }
     if (!nueva) d.id = n.id; else d.ciudad = "";
@@ -415,10 +442,11 @@ function ritmo(n, p) {
     tr.map(x => { const dv = x.ritmo - media; return `<tr><td>${x.desde}–${x.hasta} m</td><td class="t">${fmt(x.t)}</td><td>${fmt(x.ritmo)}</td><td>${fmt(x.acum)}</td><td style="color:var(--${dv > 0 ? "mal" : "ok"})">${(dv > 0 ? "+" : "−") + Math.abs(dv).toFixed(2)}</td></tr>`; }).join("") + "</tbody></table>";
 }
 
-function guardarUI() { try { localStorage.setItem("tiempos-ui", JSON.stringify({ tab, ev: evPrueba })); } catch (e) {} }
+function guardarUI() { try { localStorage.setItem("tiempos-ui", JSON.stringify({ tab, ev: evPrueba, ver: evVer })); } catch (e) {} }
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => { tab = b.dataset.tab; guardarUI(); pintar(); });
 $("ev-prueba").onchange = e => { evPrueba = e.target.value; guardarUI(); pintarEvol(); };
 $("ev-otras").onchange = pintarEvol;
+$("ev-ver").onchange = e => { evVer = e.target.value; guardarUI(); pintarEvol(); };
 ["h-temp", "h-prueba", "h-pisc"].forEach(id => $(id).onchange = pintarHist);
 $("b-nueva").onclick = () => abrir(null);
 let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (tab === "evolucion") pintarEvol(); }, 150); });

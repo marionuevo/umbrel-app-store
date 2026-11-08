@@ -32,6 +32,17 @@ DEFECTO = {
     "intervalo_min": 30,
     "webhook": "",
     "url_app": "",
+    "sexo": "f",
+}
+# Tiempos base de los puntos de World Aquatics (AQUA): P = 1000 × (B / T)³, truncado.
+# Piscina de 25 m: tabla SCM 2026 (válida del 01.09.2026 al 31.08.2027); de 50 m: LCM 2026
+# (01.01.2026 – 31.12.2026). Fuente: Points-Base-times-SCM-and-LCM-2026_09.2026.pdf en
+# worldaquatics.com/swimming/points. Comprobadas con los puntos de los PDF de Splash de la temporada.
+BASES = {
+    ("f", 25): {"50 libre": 22.83, "100 libre": 49.93, "200 libre": 109.36, "400 libre": 230.25, "800 libre": 474.0, "1500 libre": 908.24, "50 espalda": 25.23, "100 espalda": 54.02, "200 espalda": 117.33, "50 braza": 28.37, "100 braza": 62.36, "200 braza": 132.5, "50 mariposa": 23.72, "100 mariposa": 52.71, "200 mariposa": 119.32, "100 estilos": 55.11, "200 estilos": 121.63, "400 estilos": 255.48},
+    ("f", 50): {"50 libre": 23.61, "100 libre": 51.71, "200 libre": 112.23, "400 libre": 234.18, "800 libre": 484.12, "1500 libre": 920.48, "50 espalda": 26.86, "100 espalda": 57.13, "200 espalda": 123.14, "50 braza": 29.16, "100 braza": 64.13, "200 braza": 137.55, "50 mariposa": 24.43, "100 mariposa": 54.6, "200 mariposa": 121.81, "200 estilos": 125.7, "400 estilos": 263.65},
+    ("m", 25): {"50 libre": 19.9, "100 libre": 44.84, "200 libre": 98.61, "400 libre": 212.25, "800 libre": 440.46, "1500 libre": 846.88, "50 espalda": 22.11, "100 espalda": 48.16, "200 espalda": 105.12, "50 braza": 24.95, "100 braza": 55.28, "200 braza": 119.52, "50 mariposa": 21.32, "100 mariposa": 47.68, "200 mariposa": 106.85, "100 estilos": 49.28, "200 estilos": 108.88, "400 estilos": 234.81},
+    ("m", 50): {"50 libre": 20.91, "100 libre": 46.4, "200 libre": 102.0, "400 libre": 219.96, "800 libre": 452.12, "1500 libre": 870.67, "50 espalda": 23.55, "100 espalda": 51.6, "200 espalda": 111.92, "50 braza": 25.95, "100 braza": 56.88, "200 braza": 125.48, "50 mariposa": 22.27, "100 mariposa": 49.45, "200 mariposa": 110.34, "200 estilos": 112.69, "400 estilos": 242.5},
 }
 lock = threading.Lock()
 despertar = threading.Event()
@@ -276,11 +287,32 @@ def fmt(t):
     return f"{m}:{t - m * 60:05.2f}"
 
 
+def puntos(n, sexo):
+    """Puntos AQUA con las tablas vigentes (las mismas para todas las fechas, para poder comparar)."""
+    b = BASES.get((sexo, n.get("piscina") or 0), {}).get(etiqueta(n))
+    t = n.get("tiempo")
+    return int(1000 * (b / t) ** 3) if b and t else None
+
+
+def equivalencias(n, sexo):
+    """Tiempo equivalente en cada piscina: el que da los mismos puntos AQUA."""
+    b = BASES.get((sexo, n.get("piscina") or 0), {}).get(etiqueta(n))
+    t = n.get("tiempo")
+    if not b or not t:
+        return {}
+    out = {}
+    for p in (25, 50):
+        bp = BASES.get((sexo, p), {}).get(etiqueta(n))
+        if bp:
+            out[str(p)] = round(t * bp / b, 2)
+    return out
+
+
 def es_mejor(lista, n):
     """¿Es `n` la mejor marca oficial de su prueba y piscina hasta su fecha?"""
-    if n.get("tipo") != "oficial" or n.get("tiempo") is None or not n.get("piscina"):
+    if n.get("tipo") != "oficial" or n.get("tiempo") is None or not n.get("piscina") or n.get("a_mano"):
         return False
-    antes = [x["tiempo"] for x in lista if x is not n and x.get("tipo") == "oficial"
+    antes = [x["tiempo"] for x in lista if x is not n and x.get("tipo") == "oficial" and not x.get("a_mano")
              and x.get("tiempo") is not None and x.get("piscina") == n["piscina"]
              and x["distancia"] == n["distancia"] and x["estilo"] == n["estilo"]
              and str(x.get("fecha") or "") <= str(n.get("fecha") or "")]
@@ -308,6 +340,8 @@ def incorporar(lista, leidas, ruta, piscina):
         else:                           # resultados corregidos (provisionales → definitivos)
             for k in ("tiempo", "tipo", "puesto", "categoria", "puestos", "puntos", "parciales",
                       "fecha", "competicion", "ciudad", "nota"):
+                if previa.get("a_mano") and k in ("tiempo", "parciales", "nota"):
+                    continue        # el tiempo tomado a mano no lo trae la federación
                 previa[k] = e[k]
     return nuevas
 
@@ -396,7 +430,7 @@ def bucle():
 # ---------------------------------------------------------------- web
 
 CAMPOS = {"fecha": str, "competicion": str, "ciudad": str, "piscina": int, "distancia": int,
-          "estilo": str, "tiempo": float, "tipo": str, "puesto": int, "nota": str}
+          "estilo": str, "tiempo": float, "tipo": str, "puesto": int, "nota": str, "a_mano": bool}
 
 
 def limpiar(d):
@@ -405,7 +439,10 @@ def limpiar(d):
         if k not in d:
             continue
         v = d[k]
-        out[k] = None if v in (None, "") else tipo(v)
+        if tipo is bool:
+            out[k] = v in (True, "true", "on", "1", 1)
+        else:
+            out[k] = None if v in (None, "") else tipo(v)
     if out.get("estilo") and out["estilo"] not in ("libre", "espalda", "braza", "mariposa", "estilos"):
         raise ValueError("estilo no válido")
     if out.get("tipo") and out["tipo"] not in ("oficial", "parcial", "relevo", "dsq"):
@@ -441,8 +478,12 @@ class Web(BaseHTTPRequestHandler):
         elif ruta == "/api/datos":
             cfg = config()
             est = cargar(ESTADO, {})
+            nadadas = cargar(NADADAS, [])
+            for n in nadadas:
+                n["_pts"] = puntos(n, cfg["sexo"])
+                n["_eq"] = equivalencias(n, cfg["sexo"])
             self._json(200, {
-                "nombre": cfg["nombre"], "nadadas": cargar(NADADAS, []),
+                "nombre": cfg["nombre"], "nadadas": nadadas,
                 "papelera": len(cargar(PAPELERA, [])),
                 "estado": {k: est.get(k) for k in ("ultima", "buscando", "error", "eventos")}
                 | {"revisados": len(est.get("revisados", {})), "intervalo_min": cfg["intervalo_min"]},
@@ -451,10 +492,11 @@ class Web(BaseHTTPRequestHandler):
             buf = io.StringIO()
             w = csv.writer(buf, delimiter=";")
             cols = ["fecha", "competicion", "ciudad", "piscina", "distancia", "estilo", "tiempo",
-                    "tipo", "puesto", "categoria", "puntos", "nota", "origen"]
+                    "tipo", "a_mano", "puesto", "categoria", "puntos", "nota", "origen"]
             w.writerow(cols + ["tiempo_texto"])
             for n in sorted(cargar(NADADAS, []), key=lambda x: str(x.get("fecha") or "")):
                 w.writerow([n.get(c) if n.get(c) is not None else "" for c in cols] + [fmt(n.get("tiempo"))])
+            # «puntos» es el dato del PDF; los puntos AQUA calculados van en la web
             cuerpo = ("\ufeff" + buf.getvalue()).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/csv; charset=utf-8")
