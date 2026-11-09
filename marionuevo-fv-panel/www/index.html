@@ -587,7 +587,10 @@ function onEntities(ev) {
 function pushPoint(k, t, v) {
   if (v == null) return;
   const arr = series[k];
-  if (arr.length && t - arr[arr.length - 1][0] < 20) arr[arr.length - 1] = [t, v];   // como mucho un punto cada 20 s
+  // como mucho un punto por franja fija de 20 s; comparar con el último punto lo arrastraba sin
+  // fin cuando HA manda cambios cada pocos segundos, y la curva quedaba en una recta
+  const last = arr[arr.length - 1];
+  if (last && Math.floor(t / 20) === Math.floor(last[0] / 20)) arr[arr.length - 1] = [t, v];
   else arr.push([t, v]);
 }
 
