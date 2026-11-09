@@ -63,10 +63,13 @@ body {
 .top h1 { font-weight: 400; font-size: 1.6rem; margin: 0; letter-spacing: .01em; }
 .top .meta { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--muted); font-size: .85rem; margin-left: auto; align-items: center; }
 .live { display: inline-flex; align-items: center; gap: 8px; }
-.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.live.on i { background: var(--grid-out); box-shadow: 0 0 0 0 var(--grid-out); animation: pulse 2s infinite; }
+.live i { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.live.on i { background: var(--grid-out); }
+/* halo con transform y opacity en un pseudo-elemento: lo anima el compositor; con box-shadow se
+   repintaba en la CPU a cada fotograma */
+.live.on i::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: color-mix(in srgb, var(--grid-out) 60%, transparent); animation: pulse 2s infinite; }
 .live.off i { background: var(--grid-in); }
-@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--grid-out) 60%, transparent); } 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@keyframes pulse { 0% { transform: scale(1); opacity: 1; } 70%, 100% { transform: scale(3); opacity: 0; } }
 button.link { background: none; border: 0; color: var(--muted); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
 button.link:hover, button.link:focus-visible { color: var(--fg); }
 
@@ -75,7 +78,7 @@ button.link:hover, button.link:focus-visible { color: var(--fg); }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; min-width: 0; display: grid; gap: 12px; align-content: start; }
 .card h2 { font-weight: 400; font-size: 1rem; margin: 0; display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
 .state { grid-column: span 12; }
-.flow { grid-column: span 7; }
+.flow { grid-column: span 7; position: relative; }
 .figures { grid-column: span 5; }
 .day { grid-column: span 12; }
 .sunc { grid-column: span 4; }
@@ -119,6 +122,14 @@ button.link:hover, button.link:focus-visible { color: var(--fg); }
 .pulse { fill: none; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 2 18; opacity: 0; transition: opacity .6s, stroke-width .8s ease; }
 .pulse.active { opacity: 1; animation: flow linear infinite; }
 @keyframes flow { to { stroke-dashoffset: -200; } }
+/* puntos de los cables como elementos HTML que recorren la curva con transform: los mueve el
+   compositor (GPU) sin trabajo en la CPU por fotograma. El stroke-dashoffset del SVG se repintaba
+   entero en la CPU 120 veces por segundo. El SVG .pulse queda para «reducir movimiento». */
+.flow svg.gpu-flow .pulse { visibility: hidden; animation: none; }
+.flow-dots { position: absolute; left: 0; top: 0; width: 640px; height: 380px; transform-origin: 0 0; pointer-events: none; }
+.flow-dots .dots { opacity: 0; transition: opacity .6s; }
+.flow-dots .dots.on { opacity: 1; }
+.flow-dots i { position: absolute; left: 0; top: 0; width: var(--d, 4px); height: var(--d, 4px); margin: calc(var(--d, 4px) / -2) 0 0 calc(var(--d, 4px) / -2); border-radius: 50%; }
 .wire-label { font-family: var(--font-num); font-size: 12px; fill: var(--muted); }
 .nas-badge { font-family: var(--font-num); font-size: 11.5px; fill: var(--steel); }
 
@@ -214,7 +225,7 @@ dialog input:focus-visible, .btn:focus-visible { outline: 2px solid var(--steel)
 
 @media (prefers-reduced-motion: reduce) {
   .pulse.active { animation: none; stroke-dasharray: none; opacity: .9; }
-  .live.on i { animation: none; }
+  .live.on i::after { animation: none; opacity: 0; }
   .meter > i, .ring .fg, .tally .bar i, .wire, .pulse { transition: none; }
 }
 </style>
@@ -677,13 +688,66 @@ async function loadTodayStats() {
 }
 
 /* ---------- dibujo ---------- */
+/* puntos de los cables en el compositor. Cada cable tiene n puntos repartidos por igual que
+   recorren el tramo visible (fuera de los círculos de los nodos) con keyframes de translate sacados
+   de la curva; la velocidad se cambia con updatePlaybackRate, sin saltos. Mismo patrón que el SVG:
+   un punto cada ~20 unidades y 200 unidades por vuelta de la animación. */
+const FLOW_NODES = [[110, 110, 62], [510, 190, 62], [320, 312, 46]];   // centro y radio de los nodos
+const FLOW_SPEED0 = 50;   // unidades/s con playbackRate 1
+const flow = { lines: {} };
+function initFlowDots() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches || !Element.prototype.animate) return;
+  const svg = document.querySelector(".flow svg"), host = svg.parentElement;
+  const ov = document.createElement("div"); ov.className = "flow-dots"; ov.setAttribute("aria-hidden", "true");
+  const inside = q => FLOW_NODES.some(([cx, cy, r]) => Math.hypot(q.x - cx, q.y - cy) < r + 1);
+  for (const id of ["p-pv-home", "p-pv-grid", "p-grid-home"]) {
+    const p = $(id), L = p.getTotalLength();
+    let a = 0, b = L; while (a < L && inside(p.getPointAtLength(a))) a++; while (b > a && inside(p.getPointAtLength(b))) b--;
+    const vis = b - a, N = 64, n = Math.max(1, Math.round(vis / 20)), T = vis / FLOW_SPEED0 * 1000;
+    const kf = [];
+    for (let k = 0; k <= N; k++) {
+      const f = k / N, q = p.getPointAtLength(a + vis * f);
+      kf.push({ offset: f, transform: `translate(${q.x.toFixed(2)}px, ${q.y.toFixed(2)}px)`, opacity: Math.min(1, f / .04, (1 - f) / .04) });
+    }
+    const g = document.createElement("div"); g.className = "dots"; ov.appendChild(g);
+    const anims = [];
+    for (let k = 0; k < n; k++) {
+      const el = document.createElement("i"); el.style.background = p.style.stroke; g.appendChild(el);
+      const an = el.animate(kf, { duration: T, iterations: Infinity, delay: -k * T / n }); an.pause(); anims.push(an);
+    }
+    flow.lines[id] = { g, anims, rate: 0, stopT: null };
+  }
+  host.appendChild(ov);
+  svg.classList.add("gpu-flow");
+  // el SVG escala con el ancho de la tarjeta: la capa de puntos lo sigue con un scale fijo
+  const fit = () => {
+    const r = svg.getBoundingClientRect(), h = host.getBoundingClientRect();
+    ov.style.left = (r.left - h.left - host.clientLeft) + "px"; ov.style.top = (r.top - h.top - host.clientTop) + "px";
+    ov.style.transform = `scale(${r.width / 640})`;
+  };
+  new ResizeObserver(fit).observe(host); fit();
+}
+function flowDots(id, active, dur, size) {
+  const ln = flow.lines[id]; if (!ln) return;
+  ln.g.classList.toggle("on", active);
+  ln.g.style.setProperty("--d", size + "px");
+  clearTimeout(ln.stopT);
+  if (active) {
+    const rate = 200 / dur / FLOW_SPEED0;
+    for (const an of ln.anims) { if (an.playState !== "running") an.play(); if (rate !== ln.rate) an.updatePlaybackRate(rate); }
+    ln.rate = rate;
+  } else ln.stopT = setTimeout(() => ln.anims.forEach(an => an.pause()), 700);   // tras el fundido
+}
+
 function setPulse(id, w, labelId, text) {
   const p = $(id), wire = $("w" + id.slice(1));
   const active = w != null && w > 15;
   p.classList.toggle("active", active);
   // velocidad proporcional a la potencia: 3 kW ≈ 1,2 s por vuelta del patrón
-  if (active) p.style.animationDuration = Math.max(1.2, Math.min(14, 3600 / w)) + "s";
+  const dur = active ? Math.max(1.2, Math.min(14, 3600 / w)) : 0;
+  if (active) p.style.animationDuration = dur + "s";
   p.style.strokeWidth = active ? (2.5 + Math.min(4, w / 750)) : 4;
+  flowDots(id, active, dur, parseFloat(p.style.strokeWidth));
   // grosor del cable proporcional a la potencia: de 3 a 18 px a los 3 kW del inversor
   wire.style.strokeWidth = active ? 3 + 15 * Math.min(1, w / INVERTER_W) : 3;
   wire.style.stroke = active ? `color-mix(in srgb, ${p.style.stroke} 28%, transparent)` : "";
@@ -1105,6 +1169,7 @@ setInterval(() => { $("clock").textContent = hm(new Date()); }, 1000);
 $("clock").textContent = hm(new Date());
 setInterval(() => { if (ws?.readyState === 1) renderChart(); }, 60000);
 renderChart();
+initFlowDots();
 connect();
 </script>
 </body>
