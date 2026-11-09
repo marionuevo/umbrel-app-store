@@ -3,7 +3,7 @@ id: marionuevo-fv-panel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fv-panel/icon.svg
 category: automation
 name: Solar Live
-version: "1.4.0"
+version: "1.5.0"
 tagline: Live solar production and home consumption
 description: >
   Solar monitoring panel connected to the Home Assistant websocket: energy flows
@@ -26,5 +26,6 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  The day curve shades peak and standard tariff hours with a faint tint (off-peak
-  stays clear), so you can see when the sun covers the expensive hours.
+  A Sun hours / 24 h switch on the day curve shows the night and early morning
+  too, in both charts. In the sun hours view the curve now starts at 06:00
+  instead of at the first solar reading.
