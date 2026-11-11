@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Solar Live 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Varela+Round&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Vista 3D de Solar Live: la escena ocupa toda la pantalla y encima van la cabecera, las
+   etiquetas de cada nodo (HTML proyectado, no texto en WebGL) y dos tarjetas. Misma paleta
+   que index.html: noche, cal, acero, salvia y ámbar solar. */
+:root {
+  --bg: #0e1a2b; --panel: rgba(18, 33, 58, .78); --fg: #f7f0e4; --muted: #8f9cad; --line: #22344d;
+  --sun: #f0a93b; --home: #f7f0e4; --grid-out: #88a592; --grid-in: #e0785e;
+  --font-display: "Varela Round", "Nunito", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f7f0e4; --panel: rgba(255, 250, 241, .8); --fg: #0e1a2b; --muted: #5d6877; --line: #e2d8c6;
+    --sun: #c07b10; --home: #0e1a2b; --grid-out: #4f6958; --grid-in: #b24a33;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f7f0e4; --panel: rgba(255, 250, 241, .8); --fg: #0e1a2b; --muted: #5d6877; --line: #e2d8c6;
+  --sun: #c07b10; --home: #0e1a2b; --grid-out: #4f6958; --grid-in: #b24a33;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-display); font-size: 15px; line-height: 1.45;
+  font-synthesis: none; -webkit-font-smoothing: antialiased;
+}
+#scene { position: fixed; inset: 0; touch-action: none; }
+#scene canvas { display: block; width: 100%; height: 100%; outline: none; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.label { font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-family: var(--font-num); }
+
+.hud { position: fixed; inset: 0; pointer-events: none;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  display: flex; flex-direction: column; justify-content: space-between; gap: 16px; }
+.hud > * { pointer-events: auto; }
+.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px; }
+.top h1 { font-weight: 400; font-size: 1.6rem; margin: 0; letter-spacing: .01em; }
+.top h1 small { font-family: var(--font-num); font-size: .72rem; letter-spacing: .09em; color: var(--sun); margin-left: 8px; vertical-align: 3px; }
+.top .meta { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--muted); font-size: .85rem; margin-left: auto; align-items: center; }
+.live { display: inline-flex; align-items: center; gap: 8px; }
+.live i { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.live.on i { background: var(--grid-out); }
+.live.on i::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: color-mix(in srgb, var(--grid-out) 60%, transparent); animation: pulse 2s infinite; }
+.live.off i { background: var(--grid-in); }
+@keyframes pulse { 0% { transform: scale(1); opacity: 1; } 70%, 100% { transform: scale(3); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .live.on i::after { animation: none; opacity: 0; } }
+.link { background: none; border: 0; color: var(--muted); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+.link:hover, .link:focus-visible { color: var(--fg); }
+
+.cards { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px;
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.state { max-width: 460px; border-left: 4px solid var(--muted); }
+.state.out { border-left-color: var(--grid-out); }
+.state.in { border-left-color: var(--grid-in); }
+.state.even { border-left-color: var(--sun); }
+.state .head { font-size: 1.35rem; }
+.state.out .head .num { color: var(--grid-out); }
+.state.in .head .num { color: var(--grid-in); }
+.state .why { color: var(--muted); font-size: .9rem; }
+.sun { display: grid; grid-template-columns: repeat(3, auto); gap: 4px 22px; }
+.sun .v { font-family: var(--font-num); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+
+/* etiquetas pegadas a la escena: las coloca el bucle de dibujo con transform */
+.tag { position: fixed; left: 0; top: 0; pointer-events: none; white-space: nowrap; will-change: transform;
+  display: grid; justify-items: center; gap: 0; text-align: center; }
+.tag .k { font-family: var(--font-num); font-size: .66rem; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.tag .w { font-family: var(--font-num); font-size: 1.05rem; font-variant-numeric: tabular-nums; padding: 1px 8px; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--line); }
+.tag.pv .w { color: var(--sun); }
+.tag.grid.out .w { color: var(--grid-out); }
+.tag.grid.in .w { color: var(--grid-in); }
+.tag.hour { font-family: var(--font-num); font-size: .68rem; color: var(--muted); }
+.tag.compass { font-family: var(--font-num); font-size: .8rem; color: var(--muted); }
+.tag[hidden] { display: none; }
+
+dialog { background: #12213a; color: var(--fg); border: 1px solid var(--line); border-radius: 16px; padding: 22px; width: min(440px, calc(100vw - 32px)); }
+:root[data-theme="light"] dialog { background: #fffaf1; }
+dialog::backdrop { background: rgba(0, 0, 0, .5); }
+dialog h2 { margin: 0 0 8px; font-weight: 400; font-size: 1.2rem; }
+dialog p { color: var(--muted); font-size: .9rem; margin: 0 0 14px; }
+dialog label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); margin-bottom: 12px; }
+dialog input { font: inherit; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.btn { font: inherit; border: 0; border-radius: 10px; padding: 8px 16px; background: var(--sun); color: #0e1a2b; cursor: pointer; }
+.err { color: var(--grid-in); font-size: .85rem; min-height: 1.2em; }
+
+@media (max-width: 640px) {
+  .top h1 { font-size: 1.3rem; }
+  .top .meta { margin-left: 0; gap: 6px 14px; }
+  .state .head { font-size: 1.1rem; }
+  .sun { gap: 2px 16px; }
+  .card { padding: 10px 14px; }
+}
+</style>
+</head>
+<body>
+<div id="scene" aria-hidden="true"></div>
+
+<div class="hud">
+  <header class="top">
+    <h1>Solar live<small>3D</small></h1>
+    <div class="meta">
+      <span class="live" id="live"><i></i><span id="live-text">Connecting to Home Assistant…</span></span>
+      <span class="num" id="clock">--:--</span>
+      <a class="link" href="index.html">2D view</a>
+      <button class="link" id="orbit" type="button">Auto-rotate: on</button>
+      <button class="link" id="theme" type="button">Dark</button>
+      <button class="link" id="open-config" type="button">Connection</button>
+    </div>
+  </header>
+
+  <div class="cards">
+    <section class="card state" id="state" aria-live="polite">
+      <div class="head" id="st-head">Waiting for data…</div>
+      <div class="why" id="st-why"></div>
+    </section>
+    <section class="card sun" aria-label="Sun">
+      <span class="label">Elevation</span><span class="label">Azimuth</span><span class="label">On panels</span>
+      <span class="v" id="sun-el">–</span><span class="v" id="sun-az">–</span><span class="v" id="sun-inc">–</span>
+      <span class="label" id="sun-rise" style="grid-column: span 3; margin-top: 4px"></span>
+    </section>
+  </div>
+</div>
+
+<div class="tag pv" id="tag-pv"><span class="k">Panels</span><span class="w">–</span></div>
+<div class="tag home" id="tag-home"><span class="k">Home</span><span class="w">–</span></div>
+<div class="tag grid" id="tag-grid"><span class="k">Grid</span><span class="w">–</span></div>
+
+<dialog id="config">
+  <form method="dialog" id="config-form">
+    <h2>Home Assistant connection</h2>
+    <p>The token is stored only in this browser. Create it in your Home Assistant profile, under “Long-lived access tokens”.</p>
+    <label for="cfg-url">Home Assistant address
+      <input id="cfg-url" name="url" type="url" required placeholder="http://umbrel.local:8123" autocomplete="off">
+    </label>
+    <label for="cfg-token">Access token
+      <input id="cfg-token" name="token" type="password" required autocomplete="off" spellcheck="false">
+    </label>
+    <div class="err" id="cfg-err"></div>
+    <button class="btn" type="submit">Connect</button>
+  </form>
+</dialog>
+
+<!-- Igual que index.html: config.local.js define window.HA_CONFIG = {token, url?} y nunca va a git. -->
+<script src="config.local.js" onerror="void 0"></script>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/" } }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/OrbitControls.js";
+
+/* ===================== datos de Home Assistant ===================== */
+const E = {
+  pv: "sensor.solarnet_power_photovoltaics",
+  load: "sensor.solarnet_power_load_consumed",
+  grid: "sensor.solarnet_power_grid",           // + compra, − vierte
+  sun: "sun.sun",
+};
+const INVERTER_W = 3000;
+const STORE = "fv-panel-conexion";
+const $ = id => document.getElementById(id);
+const nf0 = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const hm = d => d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+const states = {};
+const num = k => { const v = parseFloat(states[E[k]]?.s); return Number.isFinite(v) ? v : null; };
+let LAT = null, LON = null;   // de get_config; sin ellos se usa el acimut y la elevación de sun.sun
+
+// Configuración y conexión: lo mismo que index.html (token de config.local.js, sesión de HA o el
+// guardado en este navegador).
+function hassSession() {
+  try { const t = JSON.parse(localStorage.getItem("hassTokens") || "null"); if (t?.refresh_token && t?.clientId) return t; } catch (e) {}
+  return null;
+}
+async function hassAccessToken(force = false) {
+  const t = hassSession(); if (!t) return null;
+  if (!force && t.access_token && t.expires > Date.now() + 60000) return t.access_token;
+  const body = new URLSearchParams({ grant_type: "refresh_token", client_id: t.clientId, refresh_token: t.refresh_token });
+  const r = await fetch(location.origin + "/auth/token", { method: "POST", body });
+  if (!r.ok) return null;
+  const n = await r.json();
+  try { localStorage.setItem("hassTokens", JSON.stringify({ ...t, access_token: n.access_token, expires_in: n.expires_in, expires: Date.now() + n.expires_in * 1000 })); } catch (e) {}
+  return n.access_token;
+}
+const sameHostHA = () => location.protocol.replace("file:", "http:") + "//" + (location.hostname || "localhost") + ":8123";
+function loadConfig() {
+  if (window.HA_CONFIG?.token) return { url: window.HA_CONFIG.url || sameHostHA(), token: window.HA_CONFIG.token };
+  if (hassSession()) return { url: location.origin, hass: true };
+  try { const c = JSON.parse(localStorage.getItem(STORE) || "null"); if (c?.url && c?.token) return c; } catch (e) {}
+  return null;
+}
+function openConfig(msg = "") {
+  const c = loadConfig() || {};
+  $("cfg-url").value = c.url || sameHostHA(); $("cfg-token").value = ""; $("cfg-err").textContent = msg;
+  if (!$("config").open) $("config").showModal();
+}
+$("open-config").onclick = () => openConfig();
+$("config-form").addEventListener("submit", ev => {
+  const url = $("cfg-url").value.trim().replace(/\/+$/, ""), token = $("cfg-token").value.trim();
+  if (!url || !token) { ev.preventDefault(); return; }
+  try { localStorage.setItem(STORE, JSON.stringify({ url, token })); } catch (e) {}
+  window.HA_CONFIG = { url, token };
+  connect();
+});
+
+let ws, msgId = 0, pending = {}, retry = 1000, subId = null, cfgNow = null;
+function setLive(kind, text) { $("live").className = "live " + kind; $("live-text").textContent = text; }
+function call(msg) { return new Promise((res, rej) => { const id = ++msgId; pending[id] = { res, rej }; ws.send(JSON.stringify({ id, ...msg })); }); }
+function connect() {
+  const cfg = cfgNow = (cfgNow?.hass ? cfgNow : loadConfig());
+  if (!cfg) { setLive("off", "Not configured"); openConfig(); return; }
+  try { ws && ws.close(); } catch (e) {}
+  setLive("", "Connecting to Home Assistant…");
+  ws = new WebSocket(cfg.url.replace(/^http/, "ws") + "/api/websocket");
+  ws.onmessage = async ev => {
+    const m = JSON.parse(ev.data);
+    if (m.type === "auth_required") {
+      const token = cfg.hass ? await hassAccessToken() : cfg.token;
+      if (!token) { setLive("off", "Home Assistant session expired"); retry = 0; openConfig("Sign in to Home Assistant again in this browser, or paste a token."); ws.close(); return; }
+      ws.send(JSON.stringify({ type: "auth", access_token: token }));
+    } else if (m.type === "auth_invalid") {
+      if (cfg.hass && !cfg.retried) { cfg.retried = true; await hassAccessToken(true); ws.close(); return; }
+      setLive("off", "Token rejected"); retry = 0; openConfig("Home Assistant rejected the token. Paste a new one."); ws.close();
+    } else if (m.type === "auth_ok") { retry = 1000; cfg.retried = false; setLive("on", "Live"); start(); }
+    else if (m.type === "result" && pending[m.id]) { const p = pending[m.id]; delete pending[m.id]; m.success ? p.res(m.result) : p.rej(m.error); }
+    else if (m.type === "event" && m.id === subId) onEntities(m.event);
+  };
+  ws.onclose = () => {
+    if (!retry) return;
+    setLive("off", "Offline · retrying");
+    setTimeout(connect, retry); retry = Math.min(retry * 2, 30000);
+  };
+}
+async function start() {
+  subId = msgId + 1;
+  call({ type: "subscribe_entities", entity_ids: Object.values(E) }).catch(() => {});
+  try {
+    const c = await call({ type: "get_config" });
+    if (Number.isFinite(c?.latitude) && Number.isFinite(c?.longitude)) { LAT = c.latitude; LON = c.longitude; buildSunPath(); updateSun(); }
+  } catch (e) {}
+}
+function onEntities(ev) {
+  for (const [id, v] of Object.entries(ev.a || {})) states[id] = { s: v.s, a: v.a || {} };
+  for (const [id, v] of Object.entries(ev.c || {})) {
+    const cur = states[id] || { s: null, a: {} }, plus = v["+"] || {};
+    if ("s" in plus) cur.s = plus.s;
+    if (plus.a) cur.a = { ...cur.a, ...plus.a };
+    states[id] = cur;
+  }
+  for (const id of Object.keys(ev.r || {})) delete states[id];
+  if (E.sun in (ev.a || {}) || E.sun in (ev.c || {})) updateSun();
+  renderData();
+}
+
+/* ===================== posición del sol ===================== */
+// Fórmulas de baja precisión del Almanaque Náutico (error < 0,1° en declinación): bastan para
+// dibujar el arco del día. El sol que se ve sale de aquí también, para que se mueva suave entre
+// las actualizaciones de sun.sun; sin latitud y longitud se usa lo que manda sun.sun.
+const RAD = Math.PI / 180;
+function solarPosition(ms, lat, lon) {
+  const n = ms / 864e5 + 2440587.5 - 2451545.0;
+  const L = (280.460 + 0.9856474 * n) % 360, g = ((357.528 + 0.9856003 * n) % 360) * RAD;
+  const lam = (L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * RAD;
+  const eps = (23.439 - 0.0000004 * n) * RAD;
+  const ra = Math.atan2(Math.cos(eps) * Math.sin(lam), Math.cos(lam));
+  const dec = Math.asin(Math.sin(eps) * Math.sin(lam));
+  const gmst = (280.46061837 + 360.98564736629 * n) % 360;
+  const H = (gmst + lon) * RAD - ra, la = lat * RAD;
+  const el = Math.asin(Math.sin(la) * Math.sin(dec) + Math.cos(la) * Math.cos(dec) * Math.cos(H));
+  const az = Math.atan2(-Math.sin(H) * Math.cos(dec), Math.sin(dec) * Math.cos(la) - Math.cos(dec) * Math.sin(la) * Math.cos(H));
+  return { az: (az / RAD + 360) % 360, el: el / RAD };
+}
+function sunNow() {
+  if (LAT != null) return solarPosition(Date.now(), LAT, LON);
+  const a = states[E.sun]?.a;
+  return a && Number.isFinite(a.azimuth) && Number.isFinite(a.elevation) ? { az: a.azimuth, el: a.elevation } : null;
+}
+// norte = −Z, este = +X, sur = +Z, oeste = −X
+const sunDir = (az, el) => new THREE.Vector3(Math.sin(az * RAD) * Math.cos(el * RAD), Math.sin(el * RAD), -Math.cos(az * RAD) * Math.cos(el * RAD));
+
+/* ===================== escena ===================== */
+const host = $("scene");
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "low-power" });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;   // nada se mueve salvo el sol: las sombras se recalculan solo cuando cambia
+host.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0e1a2b, 70, 150);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 500);
+camera.position.set(-22, 9.5, 26);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(4, 6.5, 3);
+controls.enablePan = false;
+controls.minDistance = 14; controls.maxDistance = 90;
+controls.maxPolarAngle = 86 * RAD;
+controls.autoRotateSpeed = 0.35;
+
+const hemi = new THREE.HemisphereLight(0xdfe8ef, 0x2a3442, 0.8);
+scene.add(hemi);
+const sunLight = new THREE.DirectionalLight(0xfff1dc, 2.2);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+Object.assign(sunLight.shadow.camera, { left: -28, right: 28, top: 28, bottom: -28, near: 1, far: 160 });
+sunLight.shadow.bias = -0.0004; sunLight.shadow.normalBias = 0.03;
+sunLight.target.position.set(5, 0, 4);
+scene.add(sunLight, sunLight.target);
+
+// materiales; los colores los pone applyPalette según el tema
+const M = {
+  ground: new THREE.MeshLambertMaterial(),
+  wall: new THREE.MeshLambertMaterial(),
+  roof: new THREE.MeshLambertMaterial(),
+  trim: new THREE.MeshLambertMaterial(),
+  door: new THREE.MeshLambertMaterial(),
+  window: new THREE.MeshLambertMaterial({ emissive: 0xffc06a }),
+  frame: new THREE.MeshStandardMaterial({ metalness: .6, roughness: .4 }),
+  panel: new THREE.MeshStandardMaterial({ metalness: .05, roughness: .5 }),
+  steel: new THREE.MeshLambertMaterial(),
+  cable: new THREE.MeshLambertMaterial(),
+  box: new THREE.MeshLambertMaterial(),
+  led: new THREE.MeshBasicMaterial(),
+  leaf: new THREE.MeshLambertMaterial({ flatShading: true }),
+  trunk: new THREE.MeshLambertMaterial(),
+  ring: new THREE.LineBasicMaterial({ transparent: true, opacity: .5 }),
+  arc: new THREE.LineDashedMaterial({ dashSize: .8, gapSize: 1.2, transparent: true, opacity: .7, fog: false }),
+  hourDot: new THREE.MeshBasicMaterial({ fog: false, transparent: true, opacity: .75 }),
+  ray: new THREE.LineDashedMaterial({ dashSize: .5, gapSize: .7, transparent: true, opacity: .45 }),
+};
+const shadowy = (m, cast = true, receive = true) => { m.castShadow = cast; m.receiveShadow = receive; return m; };
+
+// suelo y rosa de los vientos
+const ground = shadowy(new THREE.Mesh(new THREE.CircleGeometry(160, 64), M.ground), false, true);
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+{
+  const pts = []; for (let i = 0; i <= 96; i++) { const a = i / 96 * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(a) * 30, .02, Math.sin(a) * 30)); }
+  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), M.ring));
+  const ticks = [];
+  for (let i = 0; i < 72; i++) {
+    const a = i / 72 * Math.PI * 2, r0 = i % 18 === 0 ? 27.5 : i % 6 === 0 ? 28.8 : 29.4;
+    ticks.push(new THREE.Vector3(Math.cos(a) * r0, .02, Math.sin(a) * r0), new THREE.Vector3(Math.cos(a) * 30, .02, Math.sin(a) * 30));
+  }
+  scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(ticks), M.ring));
+}
+
+/* ---------- casa: 8 m (este-oeste) × 9 m (norte-sur), cumbrera norte-sur, faldones a 20° ---------- */
+const HW = 4, HL = 4.5, WALL = 3, PITCH = 20 * RAD;
+const RIDGE = WALL + HW * Math.tan(PITCH);
+const house = new THREE.Group(); scene.add(house);
+{
+  const s = new THREE.Shape();
+  s.moveTo(-HW, 0); s.lineTo(HW, 0); s.lineTo(HW, WALL); s.lineTo(0, RIDGE); s.lineTo(-HW, WALL); s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: HL * 2, bevelEnabled: false });
+  g.translate(0, 0, -HL);
+  house.add(shadowy(new THREE.Mesh(g, M.wall)));
+  // zócalo
+  const base = shadowy(new THREE.Mesh(new THREE.BoxGeometry(HW * 2 + .12, .35, HL * 2 + .12), M.trim), false, true);
+  base.position.y = .175; house.add(base);
+}
+// faldones: grupos girados sobre la cumbrera; en el del oeste, x local sube hacia la cumbrera
+// y la y local es la normal del tejado (hacia el oeste y arriba)
+const OVER = .45, SLOPE = (HW + OVER) / Math.cos(PITCH), SLAB = .18;
+function roofSide(sign) {
+  const g = new THREE.Group();
+  g.position.set(0, RIDGE, 0); g.rotation.z = sign * PITCH;   // +: oeste, −: este
+  const slab = shadowy(new THREE.Mesh(new THREE.BoxGeometry(SLOPE, SLAB, HL * 2 + OVER * 2), M.roof));
+  slab.position.x = -sign * SLOPE / 2;
+  g.add(slab);
+  const fascia = shadowy(new THREE.Mesh(new THREE.BoxGeometry(.08, .32, HL * 2 + OVER * 2 + .04), M.trim));
+  fascia.position.set(-sign * SLOPE, -.04, 0);
+  g.add(fascia);
+  house.add(g);
+  return g;
+}
+const roofW = roofSide(1); roofSide(-1);
+{
+  const ridgeCap = shadowy(new THREE.Mesh(new THREE.BoxGeometry(.36, .14, HL * 2 + OVER * 2 + .04), M.trim));
+  ridgeCap.position.y = RIDGE + .12; house.add(ridgeCap);
+}
+
+// placas: 5 columnas × 2 filas en vertical (1,134 × 1,722 m) en el faldón oeste
+const PW = 1.134, PH = 1.722, GAP = .025, COLS = 5, ROWS = 2, FROM_RIDGE = .4, LIFT = SLAB / 2 + .1;
+function panelTexture() {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 384;
+  const x = c.getContext("2d");
+  x.fillStyle = "#c9ced6"; x.fillRect(0, 0, 256, 384);                  // marco
+  x.fillStyle = "#12203a"; x.fillRect(8, 8, 240, 368);
+  const cw = 240 / 6, ch = 368 / 10;                                       // 60 células (6 × 10)
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 10; j++) {
+    const gx = 8 + i * cw, gy = 8 + j * ch;
+    const grd = x.createLinearGradient(gx, gy, gx + cw, gy + ch);
+    grd.addColorStop(0, "#1c3157"); grd.addColorStop(1, "#14254a");
+    x.fillStyle = grd; x.fillRect(gx + 1.5, gy + 1.5, cw - 3, ch - 3);
+    x.fillStyle = "rgba(200, 210, 225, .22)";
+    x.fillRect(gx + cw * .3, gy + 1.5, 1.2, ch - 3); x.fillRect(gx + cw * .7, gy + 1.5, 1.2, ch - 3);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+M.panel.map = panelTexture();
+const panels = new THREE.Group(); roofW.add(panels);
+{
+  // caja: x local = a lo largo de la pendiente (PH), z = a lo largo de la cumbrera (PW)
+  const geo = new THREE.BoxGeometry(PH, .045, PW);
+  const mats = [M.frame, M.frame, M.panel, M.frame, M.frame, M.frame];
+  // la textura es vertical (alto = PH): girar las UV de la cara superior
+  const uv = geo.attributes.uv;
+  for (let i = 8; i < 12; i++) { const u = uv.getX(i), v = uv.getY(i); uv.setXY(i, v, 1 - u); }
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const p = shadowy(new THREE.Mesh(geo, mats));
+    p.position.set(-(FROM_RIDGE + PH / 2 + r * (PH + GAP)), LIFT, (c - (COLS - 1) / 2) * (PW + GAP));
+    panels.add(p);
+  }
+  // raíles
+  const railGeo = new THREE.BoxGeometry(ROWS * (PH + GAP), .05, .05);
+  for (const k of [-1, 1]) {
+    const r = new THREE.Mesh(railGeo, M.frame);
+    r.position.set(-(FROM_RIDGE + ROWS * (PH + GAP) / 2), SLAB / 2 + .05, k * (COLS * (PW + GAP) / 2 - .6));
+    panels.add(r);
+  }
+}
+const PANEL_NORMAL = new THREE.Vector3(-Math.sin(PITCH), Math.cos(PITCH), 0);   // oeste, 20°
+const arrayLocal = (along, z, lift = LIFT) => roofW.localToWorld(new THREE.Vector3(-along, lift, z));
+scene.updateMatrixWorld(true);
+const PANEL_CENTER = arrayLocal(FROM_RIDGE + ROWS * (PH + GAP) / 2, 0);
+
+// puertas, ventanas, inversor y contador
+function box(w, h, d, mat, x, y, z, cast = true) { const m = shadowy(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat), cast, true); m.position.set(x, y, z); house.add(m); return m; }
+const FRONT = HL + .02;
+box(1.05, 2.15, .08, M.door, -.6, 1.08, FRONT, false);
+box(1.3, 1.15, .06, M.window, 1.9, 1.75, FRONT, false);
+box(1.3, 1.15, .06, M.window, 1.9, 1.75, -FRONT, false);
+box(1.3, 1.15, .06, M.window, -1.9, 1.75, -FRONT, false);
+box(.06, 1.15, 1.6, M.window, HW + .02, 1.75, -1.2, false);
+box(.06, 1.15, 1.6, M.window, HW + .02, 1.75, 2.0, false);
+box(.06, 1.15, 1.6, M.window, -HW - .02, 1.75, -1.6, false);
+box(.06, 1.15, 1.6, M.window, -HW - .02, 1.75, 1.8, false);
+const INV = new THREE.Vector3(-2.75, 1.55, FRONT + .1);
+box(.5, .62, .2, M.box, INV.x, INV.y, INV.z);
+const led = box(.05, .05, .02, M.led, INV.x + .15, INV.y + .2, INV.z + .11, false);
+const METER = new THREE.Vector3(3.05, 1.45, FRONT + .08);
+box(.36, .5, .16, M.box, METER.x, METER.y, METER.z);
+box(.2, .12, .02, M.door, METER.x, METER.y + .08, METER.z + .09, false);
+// soporte de la acometida en la esquina sureste
+const BRACKET = new THREE.Vector3(HW + .25, WALL + .35, HL + .25);
+{
+  const post = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(.04, .04, 1.1, 8), M.steel));
+  post.position.set(HW + .08, WALL - .05, HL + .08); house.add(post);
+  const arm = shadowy(new THREE.Mesh(new THREE.BoxGeometry(.32, .05, .05), M.steel));
+  arm.position.set(HW + .2, WALL + .4, HL + .2); arm.rotation.y = -Math.PI / 4; house.add(arm);
+}
+
+/* ---------- torres de la red ---------- */
+const TOWER1 = new THREE.Vector3(17, 0, 12), TOWER2 = new THREE.Vector3(37, 0, 33);
+const lineDir = TOWER2.clone().sub(TOWER1).normalize();
+const tipsOf = [];
+function tower(at, scale = 1) {
+  const g = new THREE.Group(); g.position.copy(at); g.rotation.y = Math.atan2(lineDir.x, lineDir.z); g.scale.setScalar(scale);
+  const lv = [0, 2.6, 5, 7.2, 9.2, 10.6, 12];
+  const half = h => 1.5 - (1.5 - .32) * Math.min(1, h / 10.6);
+  const seg = [];
+  const corner = (h, i) => { const w = half(h); return new THREE.Vector3((i & 1 ? 1 : -1) * w, h, (i & 2 ? 1 : -1) * w); };
+  const ring = [0, 1, 3, 2];
+  for (let k = 0; k < lv.length - 1; k++) {
+    const a = lv[k], b = lv[k + 1];
+    for (let i = 0; i < 4; i++) {
+      const c0 = ring[i], c1 = ring[(i + 1) % 4];
+      seg.push([corner(a, c0), corner(b, c0)]);                     // pata
+      seg.push([corner(b, c0), corner(b, c1)]);                     // anillo
+      seg.push([corner(a, c0), corner(b, c1)], [corner(a, c1), corner(b, c0)]);   // cruz
+    }
+  }
+  // crucetas
+  const arms = [[10.6, 2.9], [12, 2.1]], tips = [];
+  for (const [h, L] of arms) {
+    const w = half(h);
+    for (const s of [-1, 1]) for (const z of [-w, w]) {
+      seg.push([new THREE.Vector3(s * w, h, z), new THREE.Vector3(s * L, h, 0)]);
+      seg.push([new THREE.Vector3(s * w, h - 1, z), new THREE.Vector3(s * L, h, 0)]);
+    }
+    for (const s of [-1, 1]) tips.push(new THREE.Vector3(s * (L - .15), h - 1.05, 0));
+  }
+  seg.push([corner(12, 0), new THREE.Vector3(0, 13.1, 0)], [corner(12, 3), new THREE.Vector3(0, 13.1, 0)],
+           [corner(12, 1), new THREE.Vector3(0, 13.1, 0)], [corner(12, 2), new THREE.Vector3(0, 13.1, 0)]);
+  const strut = new THREE.InstancedMesh(new THREE.CylinderGeometry(.055, .055, 1, 5), M.steel, seg.length);
+  const mtx = new THREE.Matrix4(), up = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion();
+  seg.forEach(([p0, p1], i) => {
+    const d = p1.clone().sub(p0), len = d.length();
+    q.setFromUnitVectors(up, d.normalize());
+    mtx.compose(p0.clone().add(p1).multiplyScalar(.5), q, new THREE.Vector3(1, len, 1));
+    strut.setMatrixAt(i, mtx);
+  });
+  shadowy(strut, true, false);
+  g.add(strut);
+  // aisladores colgando de las puntas
+  const insGeo = new THREE.CylinderGeometry(.09, .09, 1, 8);
+  for (const t of tips) { const m = new THREE.Mesh(insGeo, M.trim); m.position.copy(t).add(new THREE.Vector3(0, .5, 0)); m.castShadow = true; g.add(m); }
+  scene.add(g); g.updateMatrixWorld(true);
+  const world = tips.map(t => g.localToWorld(t.clone()));
+  tipsOf.push(world);
+  return world;
+}
+const tips1 = tower(TOWER1), tips2 = tower(TOWER2), tips3 = tower(TOWER2.clone().add(lineDir.clone().multiplyScalar(22)));
+function sagPoints(a, b, sag, n = 24) {
+  const pts = [];
+  for (let i = 0; i <= n; i++) { const t = i / n, p = a.clone().lerp(b, t); p.y -= sag * 4 * t * (1 - t); pts.push(p); }
+  return pts;
+}
+for (let i = 0; i < 4; i++) for (const [A, B] of [[tips1, tips2], [tips2, tips3]]) {
+  const c = new THREE.CatmullRomCurve3(sagPoints(A[i], B[i], 1.2));
+  scene.add(shadowy(new THREE.Mesh(new THREE.TubeGeometry(c, 32, .03, 4), M.cable), true, false));
+}
+
+// árboles bajos para dar escala
+function tree(x, z, s = 1, cone = false) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s);
+  const trunk = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(.12, .16, 1.2, 6), M.trunk)); trunk.position.y = .6; g.add(trunk);
+  const top = shadowy(new THREE.Mesh(cone ? new THREE.ConeGeometry(1.1, 3, 7) : new THREE.IcosahedronGeometry(1.3, 0), M.leaf));
+  top.position.y = cone ? 2.6 : 2.1; g.add(top);
+  scene.add(g);
+}
+tree(-10, -5, 1.1); tree(-12, 4, .9); tree(-6, -12, 1.2, true); tree(7, -11, 1); tree(-3, 12, .8); tree(11, -4, .7, true);
+
+/* ---------- cables con flujo ---------- */
+// Recorrido con esquinas redondeadas; el tubo con flujo se dibuja con un shader que desplaza
+// trazos a lo largo (uv.x ∝ longitud): solo cambian uniformes, sin rehacer geometría.
+function roundedPath(pts, r = .3) {
+  const path = new THREE.CurvePath();
+  let prev = pts[0];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p = pts[i], a = p.clone().sub(prev), b = pts[i + 1].clone().sub(p);
+    const ra = Math.min(r, a.length() / 2), rb = Math.min(r, b.length() / 2);
+    const p0 = p.clone().sub(a.normalize().multiplyScalar(ra)), p1 = p.clone().add(b.normalize().multiplyScalar(rb));
+    path.add(new THREE.LineCurve3(prev, p0));
+    path.add(new THREE.QuadraticBezierCurve3(p0, p, p1));
+    prev = p1;
+  }
+  path.add(new THREE.LineCurve3(prev, pts[pts.length - 1]));
+  return path;
+}
+const flowVS = `
+uniform float uR; varying vec2 vUv;
+void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normal * uR, 1.0); }`;
+const flowFS = `
+uniform vec3 uColor; uniform float uPhase, uLen, uOn, uGap, uBase;
+varying vec2 vUv;
+void main() {
+  float ph = fract((vUv.x * uLen - uPhase) / uGap);
+  float d = smoothstep(0.0, 0.12, ph) * (1.0 - smoothstep(0.32, 0.48, ph));
+  gl_FragColor = vec4(uColor * (0.8 + 0.45 * d), (uBase + (1.0 - uBase) * d) * uOn);
+  #include <colorspace_fragment>
+}`;
+const flows = {};
+function flowWire(key, curve, segs = 160) {
+  const len = curve.getLength();
+  const cable = shadowy(new THREE.Mesh(new THREE.TubeGeometry(curve, segs, .03, 6), M.cable), true, false);
+  scene.add(cable);
+  const u = { uColor: { value: new THREE.Color() }, uPhase: { value: 0 }, uLen: { value: len }, uOn: { value: 0 }, uGap: { value: 1.3 }, uR: { value: .05 }, uBase: { value: .2 } };
+  const mat = new THREE.ShaderMaterial({ uniforms: u, vertexShader: flowVS, fragmentShader: flowFS, transparent: true, depthWrite: false });
+  const glow = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, .001, 8), mat);
+  glow.renderOrder = 2;
+  scene.add(glow);
+  return flows[key] = { u, len, speed: 0, target: { r: .05, speed: 0, on: 0 } };
+}
+// placas → inversor → contador, por el alero y la fachada sur
+{
+  const p0 = arrayLocal(FROM_RIDGE + ROWS * (PH + GAP) - .1, (COLS / 2) * (PW + GAP) - .3, LIFT - .02);
+  const p1 = arrayLocal(SLOPE - .25, HL + OVER - .2, SLAB / 2 + .04);
+  const y = WALL - .35, zf = FRONT + .06;
+  // entra por arriba al inversor y sale por su costado, por encima de la puerta y la ventana
+  const yo = 2.45, xo = INV.x + .55;
+  flowWire("pv", roundedPath([p0, p1, new THREE.Vector3(p1.x, y, zf), new THREE.Vector3(INV.x, y, zf),
+    new THREE.Vector3(INV.x, INV.y, zf), new THREE.Vector3(xo, INV.y, zf), new THREE.Vector3(xo, yo, zf),
+    new THREE.Vector3(METER.x, yo, zf), new THREE.Vector3(METER.x, METER.y + .25, zf + .02)], .25));
+}
+// contador → soporte de la esquina → torre (punta de cruceta más cercana)
+{
+  const tip = tips1.slice().sort((a, b) => a.distanceTo(BRACKET) - b.distanceTo(BRACKET))[0];
+  const zf = FRONT + .06;
+  const xs = HW - .2;
+  const wall = [new THREE.Vector3(METER.x + .18, METER.y, zf + .02), new THREE.Vector3(xs, METER.y, zf),
+    new THREE.Vector3(xs, WALL - .35, zf), new THREE.Vector3(HW + .08, WALL - .35, HL + .1), new THREE.Vector3(HW + .08, WALL + .25, HL + .12), BRACKET];
+  const span = sagPoints(BRACKET, tip, 1.1, 30).slice(1);
+  const path = roundedPath(wall, .2);
+  path.add(new THREE.CatmullRomCurve3([BRACKET, ...span]));
+  flowWire("grid", path, 260);
+}
+// rayo del sol a las placas
+const rayGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+const ray = new THREE.Line(rayGeo, M.ray); scene.add(ray);
+
+/* ---------- sol, arco del día y estrellas ---------- */
+const SUN_R = 36;
+const sunGroup = new THREE.Group(); scene.add(sunGroup);
+const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(1.7, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd27a, fog: false }));
+sunGroup.add(sunDisc);
+function glowTexture() {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const x = c.getContext("2d"), g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, "rgba(255,220,150,1)"); g.addColorStop(.25, "rgba(255,190,90,.45)"); g.addColorStop(1, "rgba(255,170,60,0)");
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), transparent: true, depthWrite: false, fog: false }));
+halo.scale.setScalar(12); sunGroup.add(halo);
+
+const arcGroup = new THREE.Group(); scene.add(arcGroup);
+const hourTags = [];
+function buildSunPath() {
+  arcGroup.clear(); hourTags.forEach(t => t.el.remove()); hourTags.length = 0;
+  if (LAT == null) return;
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  let run = [];
+  const flush = () => { if (run.length > 1) { const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(run), M.arc); l.computeLineDistances(); arcGroup.add(l); } run = []; };
+  for (let m = 0; m <= 1440; m += 5) {
+    const s = solarPosition(+d0 + m * 6e4, LAT, LON);
+    if (s.el > -.5) run.push(sunDir(s.az, Math.max(0, s.el)).multiplyScalar(SUN_R)); else flush();
+    if (m % 60 === 0 && s.el > 1) {
+      const p = sunDir(s.az, s.el).multiplyScalar(SUN_R);
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(.2, 8, 6), M.hourDot); dot.position.copy(p); arcGroup.add(dot);
+      if ((m / 60) % 2 === 0) {
+        const el = document.createElement("div"); el.className = "tag hour"; el.textContent = String(m / 60).padStart(2, "0") + ":00";
+        document.body.appendChild(el); hourTags.push({ el, p: p.clone().add(new THREE.Vector3(0, 1.6, 0)) });
+      }
+    }
+  }
+  flush();
+}
+const stars = (() => {
+  const n = 500, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const u = Math.random(), v = Math.random() * .92 + .06, th = u * Math.PI * 2, ph = Math.asin(v);
+    pos.set([Math.cos(th) * Math.cos(ph) * 140, Math.sin(ph) * 140, Math.sin(th) * Math.cos(ph) * 140], i * 3);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const p = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf7f0e4, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false }));
+  scene.add(p); return p;
+})();
+
+/* ---------- etiquetas ---------- */
+const tags = [
+  { el: $("tag-pv"), p: PANEL_CENTER.clone().add(PANEL_NORMAL.clone().multiplyScalar(1.6)) },
+  { el: $("tag-home"), p: new THREE.Vector3(.4, RIDGE + 1.6, HL - 1) },
+  { el: $("tag-grid"), p: TOWER1.clone().add(new THREE.Vector3(0, 14, 0)) },
+];
+const compass = [["N", 0, -33], ["E", 33, 0], ["S", 0, 33], ["W", -33, 0]].map(([t, x, z]) => {
+  const el = document.createElement("div"); el.className = "tag compass"; el.textContent = t; document.body.appendChild(el);
+  return { el, p: new THREE.Vector3(x, .3, z), center: true };
+});
+const v3 = new THREE.Vector3();
+function placeTags() {
+  const w = innerWidth, h = innerHeight;
+  for (const t of [...tags, ...compass, ...hourTags]) {
+    v3.copy(t.p).project(camera);
+    const vis = v3.z < 1 && v3.x > -1.2 && v3.x < 1.2 && v3.y > -1.2 && v3.y < 1.2;
+    t.el.hidden = !vis;
+    // sin meterse bajo la cabecera
+    if (vis) t.el.style.transform = `translate(${((v3.x + 1) / 2 * w).toFixed(1)}px, ${Math.max(t.center ? 0 : 100, (1 - v3.y) / 2 * h).toFixed(1)}px) translate(-50%, ${t.center ? "-50%" : "-100%"})`;
+  }
+}
+
+/* ===================== paleta y sol ===================== */
+const PAL = {
+  dark: { bgNight: 0x0e1a2b, bgDay: 0x2a4a75, ground: 0x1d3149, wall: 0xe8e0d2, roof: 0x4a5566, trim: 0xb9b2a6, door: 0x2a3a52,
+    window: 0x8fa3bb, steel: 0x7c8a9c, cable: 0x283548, box: 0xd8d2c6, leaf: 0x5f7d6a, trunk: 0x6b5848, ring: 0x3a4d68, arc: 0xf0a93b,
+    sun: 0xf0a93b, home: 0xf7f0e4, out: 0x88a592, in: 0xe0785e, hemiSky: 0x9fb3cc, hemiGround: 0x1a2738 },
+  light: { bgNight: 0xd7d9dc, bgDay: 0xf7f0e4, ground: 0xebe2d1, wall: 0xfffaf1, roof: 0x5d6877, trim: 0xd9d0bf, door: 0x406896,
+    window: 0x9fb2c8, steel: 0x6e7b8c, cable: 0x2f3b4c, box: 0xf2ece1, leaf: 0x88a592, trunk: 0x8a7462, ring: 0xc9bea9, arc: 0xc07b10,
+    sun: 0xc07b10, home: 0x0e1a2b, out: 0x4f6958, in: 0xb24a33, hemiSky: 0xffffff, hemiGround: 0xcbbfa8 },
+};
+let pal = PAL.dark, isDark = true;
+function applyPalette() {
+  pal = isDark ? PAL.dark : PAL.light;
+  for (const k of ["ground", "wall", "roof", "trim", "door", "window", "steel", "cable", "box", "leaf", "trunk"]) M[k].color.set(pal[k]);
+  M.frame.color.set(isDark ? 0xaab2bd : 0xc9ced6);
+  M.panel.color.set(0xffffff);
+  M.ring.color.set(pal.ring); M.arc.color.set(pal.arc); M.hourDot.color.set(pal.arc); M.ray.color.set(pal.sun);
+  hemi.color.set(pal.hemiSky); hemi.groundColor.set(pal.hemiGround);
+  updateSun(); renderData();
+}
+let sunInfo = null;
+function updateSun() {
+  const s = sunNow(); sunInfo = s;
+  const el = s ? s.el : -30;
+  const day = THREE.MathUtils.smoothstep(el, -6, 8);          // 0 de noche, 1 de día
+  const low = 1 - THREE.MathUtils.smoothstep(el, 2, 25);       // tono cálido cerca del horizonte
+  const bg = new THREE.Color(pal.bgNight).lerp(new THREE.Color(pal.bgDay), day);
+  scene.background = bg; scene.fog.color.copy(bg);
+  hemi.intensity = (isDark ? .35 : .9) + day * (isDark ? .75 : .6);
+  stars.material.opacity = isDark ? (1 - day) * .85 : 0;
+  if (s && el > -2) {
+    const dir = sunDir(s.az, Math.max(el, .5));
+    sunGroup.position.copy(dir).multiplyScalar(SUN_R); sunGroup.visible = el > -1.5;
+    sunLight.position.copy(sunLight.target.position).add(dir.clone().multiplyScalar(70));
+    sunLight.intensity = (isDark ? 2.0 : 2.4) * day;
+    sunLight.color.set(0xfff1dc).lerp(new THREE.Color(0xffa860), low * .7);
+    sunDisc.material.color.set(0xffe2a0).lerp(new THREE.Color(0xff9a50), low * .8);
+    sunLight.castShadow = day > .05;
+  } else { sunGroup.visible = false; sunLight.intensity = 0; sunLight.castShadow = false; }
+  // ángulo de incidencia en las placas
+  if (s) {
+    const cos = Math.max(0, sunDir(s.az, s.el).dot(PANEL_NORMAL)) * (s.el > 0 ? 1 : 0);
+    $("sun-el").textContent = nf1.format(s.el) + "°";
+    $("sun-az").textContent = nf0.format(s.az) + "° " + compassName(s.az);
+    $("sun-inc").textContent = s.el > 0 ? Math.round(cos * 100) + "%" : "–";
+    $("sun-inc").title = s.el > 0 ? "Angle of incidence " + nf0.format(Math.acos(cos) / RAD) + "°" : "";
+    ray.visible = s.el > 0 && cos > 0;
+    if (ray.visible) {
+      const pos = rayGeo.attributes.position;
+      const a = PANEL_CENTER, b = sunGroup.position.clone().sub(a).normalize().multiplyScalar(20).add(a);
+      pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, b.x, b.y, b.z); pos.needsUpdate = true; ray.computeLineDistances();
+    }
+  }
+  const a = states[E.sun]?.a;
+  if (a?.next_rising && a?.next_setting) {
+    const dms = 864e5; let rise = new Date(a.next_rising), set = new Date(a.next_setting);
+    if (rise > set) rise = new Date(rise - dms);
+    $("sun-rise").textContent = "Sunrise " + hm(rise) + " · sunset " + hm(set);
+  }
+  renderer.shadowMap.needsUpdate = true;
+  if (LAT != null || s) frameForSun();
+  requestRender();
+}
+const compassName = az => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(az / 45) % 8];
+
+/* ===================== datos → escena ===================== */
+function setFlow(key, w, color, dir = 1) {
+  const f = flows[key], on = w != null && w > 5, x = on ? Math.min(1, w / INVERTER_W) : 0;
+  f.target.on = on ? 1 : 0;
+  f.target.r = .045 + .13 * Math.sqrt(x);
+  f.target.speed = on ? dir * (1.2 + 5 * x) : 0;
+  f.u.uColor.value.set(color);
+  f.u.uBase.value = isDark ? .22 : .3;
+}
+function renderData() {
+  const pv = num("pv"), load = num("load"), grid = num("grid");
+  const exp = grid != null ? Math.max(0, -grid) : null, imp = grid != null ? Math.max(0, grid) : null;
+  setFlow("pv", pv, pal.sun, 1);
+  if (grid != null && grid < -5) setFlow("grid", exp, pal.out, 1);
+  else if (grid != null && grid > 5) setFlow("grid", imp, pal.in, -1);
+  else setFlow("grid", 0, pal.out, 1);
+  // placas que brillan un poco con la producción, ventanas con el consumo, LED del inversor
+  const xp = pv ? Math.min(1, pv / INVERTER_W) : 0;
+  M.panel.emissive.set(pal.sun); M.panel.emissiveIntensity = .12 * xp;
+  const xl = load ? Math.min(1, load / 3000) : 0;
+  M.window.emissiveIntensity = (sunInfo && sunInfo.el > 3 ? .15 : .55) + .9 * xl;
+  M.led.color.set(pv > 5 ? pal.out : 0x3a4556);
+
+  const W = v => v == null ? "–" : nf0.format(v) + " W";
+  $("tag-pv").querySelector(".w").textContent = W(pv);
+  $("tag-home").querySelector(".w").textContent = W(load);
+  const g = $("tag-grid");
+  g.className = "tag grid " + (grid == null ? "" : grid < -5 ? "out" : grid > 5 ? "in" : "");
+  g.querySelector(".k").textContent = grid == null ? "Grid" : grid < -5 ? "Grid · exporting" : grid > 5 ? "Grid · importing" : "Grid · idle";
+  g.querySelector(".w").textContent = grid == null ? "–" : W(Math.abs(grid));
+
+  const st = $("state"), head = $("st-head"), why = $("st-why");
+  if (pv == null || load == null || grid == null) { st.className = "card state"; head.textContent = "Waiting for data…"; why.textContent = ""; }
+  else if (grid < -5) { st.className = "card state out"; head.innerHTML = `Exporting <span class="num">${nf0.format(exp)}</span> W`; why.textContent = `The sun covers the whole home (${nf0.format(load)} W) and the rest flows to the grid tower.`; }
+  else if (grid > 5) {
+    st.className = "card state in"; head.innerHTML = `Importing <span class="num">${nf0.format(imp)}</span> W`;
+    const pct = load > 0 ? Math.round(Math.max(0, pv) / load * 100) : 0;
+    why.textContent = pv > 15 && pct > 0 ? `The panels cover ${pct}% of the home; the rest comes down the line from the tower.`
+      : states[E.sun]?.s === "below_horizon" ? "Night time: the whole home runs on the grid." : "No production: the whole home runs on the grid.";
+  } else { st.className = "card state even"; head.textContent = "Balanced"; why.textContent = "The panels are producing exactly what the home is using."; }
+  requestRender();
+}
+
+/* ===================== bucle ===================== */
+// 30 fps como mucho; con «reducir movimiento» no hay bucle: se dibuja solo cuando algo cambia.
+let last = 0, needRender = true, looping = false;
+const FRAME = 1000 / 30;
+function requestRender() { needRender = true; if (!looping) requestAnimationFrame(drawOnce); }
+function drawOnce() { if (looping || !needRender) return; needRender = false; controls.update(); renderer.render(scene, camera); placeTags(); }
+function loop(t) {
+  if (!looping) return;
+  requestAnimationFrame(loop);
+  if (t - last < FRAME - 3) return;
+  const dt = Math.min(.1, (t - last) / 1000); last = t;
+  for (const f of Object.values(flows)) {
+    const k = 1 - Math.exp(-dt * 3);
+    f.u.uR.value += (f.target.r - f.u.uR.value) * k;
+    f.u.uOn.value += (f.target.on - f.u.uOn.value) * k;
+    f.speed += (f.target.speed - f.speed) * k;
+    f.u.uPhase.value = (f.u.uPhase.value + f.speed * dt) % 1e4;
+  }
+  controls.update(dt);
+  renderer.render(scene, camera);
+  placeTags();
+}
+function setMotion() {
+  const still = reduceMotion.matches;
+  controls.enableDamping = !still;
+  controls.autoRotate = !still && orbit;
+  $("orbit").hidden = still;
+  if (still) {
+    looping = false;
+    for (const f of Object.values(flows)) { f.u.uR.value = f.target.r; f.u.uOn.value = f.target.on; }
+    requestRender();
+  } else if (!looping) { looping = true; last = performance.now(); requestAnimationFrame(loop); }
+}
+controls.addEventListener("change", () => { if (!looping) requestRender(); });
+reduceMotion.addEventListener?.("change", setMotion);
+
+let orbit = true; try { orbit = localStorage.getItem("fv-panel-3d-giro") !== "off"; } catch (e) {}
+const showOrbit = () => { $("orbit").textContent = "Auto-rotate: " + (orbit ? "on" : "off"); controls.autoRotate = orbit && !reduceMotion.matches; };
+$("orbit").onclick = () => { orbit = !orbit; try { localStorage.setItem("fv-panel-3d-giro", orbit ? "on" : "off"); } catch (e) {} showOrbit(); };
+// al tocar la escena se para el giro y vuelve a los 20 s
+let idleTimer;
+controls.addEventListener("start", () => { controls.autoRotate = false; clearTimeout(idleTimer); });
+controls.addEventListener("end", () => { clearTimeout(idleTimer); idleTimer = setTimeout(showOrbit, 20000); });
+
+// Encuadre inicial: con el sol al este (mañana), desde el oeste mirando hacia él, para ver a la vez
+// las placas y el sol; por la tarde las placas miran al sol y desde el suroeste se ven las dos cosas
+// mejor que de frente. El giro automático enseña el resto.
+let framed = false;
+function frameForSun() {
+  if (framed || !sunInfo) return; framed = true;
+  const az = sunInfo.el > 0 && sunInfo.az < 180 ? sunInfo.az + 180 - 35 : 218;
+  const off = camera.position.clone().sub(controls.target), r = Math.hypot(off.x, off.z);
+  camera.position.set(controls.target.x + Math.sin(az * RAD) * r, camera.position.y, controls.target.z - Math.cos(az * RAD) * r);
+  controls.update(); requestRender();
+}
+function resize() {
+  const w = host.clientWidth, h = host.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.fov = w / h < .9 ? 58 : 46;     // en vertical (móvil) hace falta más campo
+  camera.updateProjectionMatrix();
+  requestRender();
+}
+new ResizeObserver(resize).observe(host);
+
+/* tema: compartido con la vista 2D (misma clave) */
+function applyTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  isDark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  $("theme").textContent = isDark ? "Light" : "Dark";
+  applyPalette();
+}
+$("theme").onclick = () => {
+  const t = $("theme").textContent === "Dark" ? "dark" : "light";
+  try { localStorage.setItem("fv-panel-tema", t); } catch (e) {}
+  applyTheme(t);
+};
+let savedTheme = null; try { savedTheme = localStorage.getItem("fv-panel-tema"); } catch (e) {}
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (!document.documentElement.dataset.theme) applyTheme(null); });
+
+$("clock").textContent = hm(new Date());
+setInterval(() => { $("clock").textContent = hm(new Date()); }, 1000);
+setInterval(updateSun, 60000);
+// a medianoche, el arco del día nuevo
+setInterval(() => { const d = new Date(); if (d.getHours() === 0 && d.getMinutes() === 0) buildSunPath(); }, 60000);
+
+applyTheme(savedTheme);
+showOrbit();
+setMotion();
+resize();
+connect();
+window.__solar3d = { THREE, scene, camera, controls, renderer, states, solarPosition, flows };
+</script>
+</body>
+</html>

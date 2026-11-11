@@ -43,7 +43,20 @@ window.HA_CONFIG.tariff = [
 
 Sin `tariff` se usan los sensores de tarifa de SolarNet.
 
+## Vista 3D
+
+`www/3d.html` es la misma conexión dibujada en three.js: casa con tejado a dos
+aguas (cumbrera norte-sur, faldones a 20°), las 5 × 2 placas en vertical en el
+faldón oeste, el sol en su posición real (latitud y longitud de `get_config` de
+Home Assistant) con el arco del día y sus sombras, y una torre de la red. El
+flujo corre por los cables: placas → inversor → contador y contador ↔ torre
+(salvia al verter, coral al comprar). three.js r170 va dentro de la app, en
+`www/vendor/three/` (licencia MIT), para no depender de un CDN. Dibuja como
+mucho a 30 fps; con «reducir movimiento» solo dibuja cuando cambia algo.
+
 ## Desarrollo
 
 `~/AIWork/solar-panel/index.html` en el Mac es un enlace a `www/index.html`;
-allí `config.local.js` lleva el token del Mac.
+allí `config.local.js` lleva el token del Mac. `3d.html` y `vendor/` también son
+enlaces. Con la vista 3D hace falta un servidor (los módulos no cargan desde
+`file://`): `python3 -m http.server 8765` en esa carpeta.

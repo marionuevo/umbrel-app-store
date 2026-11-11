@@ -70,8 +70,8 @@ body {
 .live.on i::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: color-mix(in srgb, var(--grid-out) 60%, transparent); animation: pulse 2s infinite; }
 .live.off i { background: var(--grid-in); }
 @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 70%, 100% { transform: scale(3); opacity: 0; } }
-button.link { background: none; border: 0; color: var(--muted); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
-button.link:hover, button.link:focus-visible { color: var(--fg); }
+.link { background: none; border: 0; color: var(--muted); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+.link:hover, .link:focus-visible { color: var(--fg); }
 
 /* rejilla */
 .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
@@ -237,6 +237,7 @@ dialog input:focus-visible, .btn:focus-visible { outline: 2px solid var(--steel)
     <div class="meta">
       <span class="live" id="live"><i></i><span id="live-text">Connecting to Home Assistant…</span></span>
       <span class="num" id="clock">--:--</span>
+      <a class="link" href="3d.html">3D view</a>
       <button class="link" id="theme" type="button">Dark</button>
       <button class="link" id="open-config" type="button">Connection</button>
     </div>

@@ -3,7 +3,7 @@ id: marionuevo-fv-panel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fv-panel/icon.svg
 category: automation
 name: Solar Live
-version: "1.6.0"
+version: "1.7.0"
 tagline: Live solar production and home consumption
 description: >
   Solar monitoring panel connected to the Home Assistant websocket: energy flows
@@ -26,6 +26,7 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  The moving dots on the flow wires and the Live halo now run on the GPU
-  compositor, so the page uses about half the CPU while it is open.
-  With Reduce Motion turned on, the wires stay still.
+  New 3D view (link "3D view" in the header): the house with its gable roof,
+  the 5 × 2 panels on the west slope, the sun at its real position with today's
+  path and shadows, and a grid tower, with the current flowing along the wires.
+  The 2D panel is unchanged.
