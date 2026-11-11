@@ -151,6 +151,7 @@ dialog input { font: inherit; color: var(--fg); background: transparent; border:
 <div class="tag small" id="tag-inv"><span class="k">Inverter</span><span class="w"><span class="dc" id="inv-dc">DC –</span><span class="ac" id="inv-ac">AC –</span></span></div>
 <div class="tag small" id="tag-meter"><span class="k">Meter</span></div>
 <div class="tag sunpin" id="tag-sun" hidden><i id="sun-arrow">➜</i><span id="sun-pin">☀</span></div>
+<div class="tag small beam" id="tag-beam" hidden><span class="k">Sunlight on panels</span><span class="w"><span class="dc" id="beam-v">–</span></span></div>
 <div class="tag small" id="tag-trafo"><span class="k">Transformer</span><span class="w"><span id="tr-hv">HV –</span><span id="tr-lv">LV –</span></span></div>
 
 <dialog id="config">
@@ -402,7 +403,6 @@ const M = {
   ring: new THREE.LineBasicMaterial({ transparent: true, opacity: .5 }),
   arc: new THREE.LineDashedMaterial({ dashSize: .8 * 600 / 36, gapSize: 1.2 * 600 / 36, transparent: true, opacity: .7, fog: false }),
   hourDot: new THREE.MeshBasicMaterial({ fog: false, transparent: true, opacity: .75 }),
-  ray: new THREE.LineDashedMaterial({ dashSize: .5, gapSize: .7, transparent: true, opacity: .45 }),
 };
 const shadowy = (m, cast = true, receive = true) => { m.castShadow = cast; m.receiveShadow = receive; return m; };
 
@@ -736,8 +736,43 @@ function flowWire(key, curve, segs = 160) {
   flowWire("hv", path, 320);
 }
 // rayo del sol a las placas
-const rayGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-const ray = new THREE.Line(rayGeo, M.ray); scene.add(ray);
+// Haz de sol: seis rayos paralelos que llegan a las placas desde la dirección del sol, con trazos
+// que bajan hacia ellas, más brillantes al llegar y apagándose hacia el cielo; en cada impacto, un
+// destello en la placa. Su intensidad sigue al coseno de incidencia y baja con las nubes.
+const BEAM_L = 16;
+const beamU = { uColor: { value: new THREE.Color() }, uT: { value: 0 }, uOn: { value: 0 }, uLen: { value: BEAM_L } };
+const beamMat = new THREE.ShaderMaterial({ uniforms: beamU, transparent: true, depthWrite: false,
+  vertexShader: `varying float vA; void main() { vA = position.y + 0.5; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform vec3 uColor; uniform float uT, uOn, uLen; varying float vA;
+    void main() {
+      float ph = fract(vA * uLen / 1.6 + uT * 0.9);
+      float d = smoothstep(0.0, 0.2, ph) * (1.0 - smoothstep(0.35, 0.6, ph));
+      float fade = pow(1.0 - vA, 0.8) * smoothstep(0.0, 0.03, vA);
+      gl_FragColor = vec4(uColor, (0.22 + 0.78 * d) * fade * uOn);
+      #include <colorspace_fragment>
+    }` });
+const hitMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, opacity: 0 });
+const beams = [];
+{
+  const geo = new THREE.CylinderGeometry(.05, .05, 1, 8, 1, true), hitGeo = new THREE.CircleGeometry(.32, 20);
+  const nq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), PANEL_NORMAL);
+  for (const r of [0, 1]) for (const c of [0, 2, 4]) {
+    const end = arrayLocal(FROM_RIDGE + PH / 2 + r * (PH + GAP) + (c === 2 ? .3 : -.2) * (r ? -1 : 1), (c - 2) * (PW + GAP), LIFT + .03);
+    const m = new THREE.Mesh(geo, beamMat); m.renderOrder = 3; scene.add(m);
+    const hit = new THREE.Mesh(hitGeo, hitMat); hit.position.copy(end); hit.quaternion.copy(nq); hit.renderOrder = 3; scene.add(hit);
+    beams.push({ m, end });
+  }
+}
+const yUp = new THREE.Vector3(0, 1, 0);
+function placeBeams(dir, on) {
+  beamU.uOn.value = on; hitMat.opacity = .55 * on;
+  const q = new THREE.Quaternion().setFromUnitVectors(yUp, dir);
+  for (const b of beams) {
+    b.m.visible = on > .01;
+    b.m.quaternion.copy(q); b.m.scale.set(1, BEAM_L, 1);
+    b.m.position.copy(b.end).addScaledVector(dir, BEAM_L / 2);
+  }
+}
 
 /* ---------- sol, arco del día y estrellas ---------- */
 // El cielo (sol, arco del día y estrellas) va en una esfera centrada en la cámara, que la sigue en
@@ -855,6 +890,7 @@ const tags = [
   { el: $("tag-inv"), p: INV.clone().add(new THREE.Vector3(-.2, -.45, .2)), near: true },
   { el: $("tag-meter"), p: METER.clone().add(new THREE.Vector3(0, -.4, .2)), near: true },
   { el: $("tag-trafo"), p: TR.at, near: true, nearDist: 36 },
+  { el: $("tag-beam"), p: PANEL_CENTER.clone(), off: true },
 ];
 const compass = [["N", 0, -33], ["E", 33, 0], ["S", 0, 33], ["W", -33, 0]].map(([t, x, z]) => {
   const el = document.createElement("div"); el.className = "tag compass"; el.textContent = t; document.body.appendChild(el);
@@ -875,7 +911,7 @@ function placeTags() {
     const wp = t.sky ? v3.clone() : t.p;
     v3.project(camera);
     const vis = v3.z < 1 && v3.x > -1.2 && v3.x < 1.2 && v3.y > -1.2 && v3.y < 1.2 && (!t.near || camera.position.distanceTo(t.p) < (t.nearDist || 26));
-    t.el.hidden = !vis || ((t.center || t.sky) && hiddenByHouse(wp));
+    t.el.hidden = !vis || t.off || ((t.center || t.sky) && hiddenByHouse(wp));
     // sin meterse bajo la cabecera
     if (vis) t.el.style.transform = `translate(${((v3.x + 1) / 2 * w).toFixed(1)}px, ${Math.max(t.center ? 0 : 100, (1 - v3.y) / 2 * h).toFixed(1)}px) translate(-50%, ${t.center ? "-50%" : t.near ? "0" : "-100%"})`;
   }
@@ -912,7 +948,8 @@ function applyPalette() {
   for (const k of ["ground", "wall", "roof", "trim", "trafo", "door", "window", "steel", "cable", "box", "leaf", "trunk"]) M[k].color.set(pal[k]);
   M.frame.color.set(isDark ? 0xaab2bd : 0xc9ced6);
   M.panel.color.set(0xffffff);
-  M.ring.color.set(pal.ring); M.arc.color.set(pal.arc); M.hourDot.color.set(pal.arc); M.ray.color.set(pal.sun);
+  M.ring.color.set(pal.ring); M.arc.color.set(pal.arc); M.hourDot.color.set(pal.arc);
+  beamU.uColor.value.set(isDark ? 0xffcf70 : 0xd08d12); hitMat.color.set(isDark ? 0xffd88a : 0xe0a030);
   hemi.color.set(pal.hemiSky); hemi.groundColor.set(pal.hemiGround);
   updateSun(); renderData();
 }
@@ -948,13 +985,14 @@ function updateSun() {
     $("sun-az").textContent = nf0.format(s.az) + "° " + compassName(s.az);
     $("sun-inc").textContent = s.el > 0 ? Math.round(cos * 100) + "%" : "–";
     $("sun-inc").title = s.el > 0 ? "Angle of incidence " + nf0.format(Math.acos(cos) / RAD) + "°" : "";
-    ray.visible = s.el > 0 && cos > 0;
-    if (ray.visible) {
-      const pos = rayGeo.attributes.position;
-      const a = PANEL_CENTER, b = sunGroup.position.clone().normalize().multiplyScalar(20).add(a);
-      pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, b.x, b.y, b.z); pos.needsUpdate = true; ray.computeLineDistances();
-    }
-  }
+    const lit = s.el > 0 && cos > 0;
+    const on = lit ? THREE.MathUtils.smoothstep(cos, 0, .15) * (1 - cloud * .75) : 0;
+    const dir = sunDir(s.az, Math.max(s.el, .5));
+    placeBeams(dir, on);
+    const bt = tags.find(t => t.el.id === "tag-beam");
+    bt.p.copy(PANEL_CENTER).addScaledVector(dir, 6.5); bt.off = !lit;
+    $("beam-v").textContent = lit ? `${Math.round(cos * 100)}% · ${nf0.format(Math.acos(cos) / RAD)}° incidence` : "–";
+  } else { placeBeams(yUp, 0); }
   const a = states[E.sun]?.a;
   if (a?.next_rising && a?.next_setting) {
     const dms = 864e5; let rise = new Date(a.next_rising), set = new Date(a.next_setting);
@@ -1041,6 +1079,7 @@ function loop(t) {
     f.speed += (f.target.speed - f.speed) * k;
     f.u.uPhase.value = (f.u.uPhase.value + f.speed * dt) % 1e4;
   }
+  beamU.uT.value = (beamU.uT.value + dt) % 1e4;
   // la nubosidad cambia despacio (constante de 40 s); el cielo y las sombras se rehacen cada 4 s si se ha movido
   const c0 = cloud;
   cloud += (cloudTarget - cloud) * (1 - Math.exp(-dt / 40));

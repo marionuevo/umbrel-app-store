@@ -3,7 +3,7 @@ id: marionuevo-fv-panel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fv-panel/icon.svg
 category: automation
 name: Solar Live
-version: "1.9.1"
+version: "1.9.2"
 tagline: Live solar production and home consumption
 description: >
   Solar monitoring panel connected to the Home Assistant websocket: energy flows
@@ -26,8 +26,7 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  3D view: the sun, its daily path and the stars are now at infinity, so the sun
-  can no longer appear in front of the camera while orbiting. When the sun is
-  out of the frame, a marker on the screen edge points to it with its elevation.
-  The camera can tilt up to look at the sky, and the clouds fade in bird's-eye
-  views.
+  3D view: the dashed line from the panels to the sun is now a beam of sunlight
+  hitting the panels, brighter the more directly the sun shines on them and
+  dimmer with clouds, labelled with the share of light the panels get and the
+  angle of incidence.
