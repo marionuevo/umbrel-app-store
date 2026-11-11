@@ -68,6 +68,10 @@ baja y tres puentes a las crucetas en el de alta; el flujo sigue por la línea d
 media tensión, más fino (a 20 kV la misma potencia lleva unas 85 veces menos
 corriente). La tensión de alta es `window.HA_CONFIG.hvVolts` (20000 si no se pone).
 
+Cielo en el infinito (1.9.1): sol, arco y estrellas van en una esfera de 600 m
+centrada en la cámara, que la sigue en cada fotograma; así el sol nunca queda
+entre la cámara y la casa. Fuera del encuadre, una píldora en el borde lo señala.
+
 ## Desarrollo
 
 `~/AIWork/solar-panel/index.html` en el Mac es un enlace a `www/index.html`;

@@ -88,6 +88,9 @@ body {
 .tag .dc { color: var(--sun); }
 .tag .ac { color: var(--ac); }
 .sun .sky { grid-column: span 3; font-size: .9rem; }
+.tag.sunpin { font-family: var(--font-num); font-size: .8rem; color: var(--sun); display: flex; align-items: center; gap: 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; }
+.tag.sunpin i { font-style: normal; display: inline-block; }
 .tag.hour { font-family: var(--font-num); font-size: .68rem; color: var(--muted); }
 .tag.compass { font-family: var(--font-num); font-size: .8rem; color: var(--muted); }
 .tag[hidden] { display: none; }
@@ -147,6 +150,7 @@ dialog input { font: inherit; color: var(--fg); background: transparent; border:
 <div class="tag grid" id="tag-grid"><span class="k">Grid</span><span class="w">–</span></div>
 <div class="tag small" id="tag-inv"><span class="k">Inverter</span><span class="w"><span class="dc" id="inv-dc">DC –</span><span class="ac" id="inv-ac">AC –</span></span></div>
 <div class="tag small" id="tag-meter"><span class="k">Meter</span></div>
+<div class="tag sunpin" id="tag-sun" hidden><i id="sun-arrow">➜</i><span id="sun-pin">☀</span></div>
 <div class="tag small" id="tag-trafo"><span class="k">Transformer</span><span class="w"><span id="tr-hv">HV –</span><span id="tr-lv">LV –</span></span></div>
 
 <dialog id="config">
@@ -357,13 +361,15 @@ host.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0x0e1a2b, 70, 150);
-const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 500);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 1200);
 camera.position.set(-22, 9.5, 26);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(4, 6.5, 3);
 controls.enablePan = false;
 controls.minDistance = 14; controls.maxDistance = 90;
-controls.maxPolarAngle = 86 * RAD;
+// se puede bajar la cámara por debajo del punto al que mira (mirar hacia arriba, al sol), pero
+// no meterla bajo el suelo: ver el límite en el evento change
+controls.maxPolarAngle = 102 * RAD;
 controls.autoRotateSpeed = 0.35;
 
 const hemi = new THREE.HemisphereLight(0xdfe8ef, 0x2a3442, 0.8);
@@ -394,7 +400,7 @@ const M = {
   leaf: new THREE.MeshLambertMaterial({ flatShading: true }),
   trunk: new THREE.MeshLambertMaterial(),
   ring: new THREE.LineBasicMaterial({ transparent: true, opacity: .5 }),
-  arc: new THREE.LineDashedMaterial({ dashSize: .8, gapSize: 1.2, transparent: true, opacity: .7, fog: false }),
+  arc: new THREE.LineDashedMaterial({ dashSize: .8 * 600 / 36, gapSize: 1.2 * 600 / 36, transparent: true, opacity: .7, fog: false }),
   hourDot: new THREE.MeshBasicMaterial({ fog: false, transparent: true, opacity: .75 }),
   ray: new THREE.LineDashedMaterial({ dashSize: .5, gapSize: .7, transparent: true, opacity: .45 }),
 };
@@ -734,9 +740,13 @@ const rayGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), ne
 const ray = new THREE.Line(rayGeo, M.ray); scene.add(ray);
 
 /* ---------- sol, arco del día y estrellas ---------- */
-const SUN_R = 36;
-const sunGroup = new THREE.Group(); scene.add(sunGroup);
-const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(1.7, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd27a, fog: false, transparent: true }));
+// El cielo (sol, arco del día y estrellas) va en una esfera centrada en la cámara, que la sigue en
+// cada fotograma: está «en el infinito», como el sol de verdad, y nunca queda entre la cámara y la
+// casa por mucho que se orbite. Los tamaños escalan con el radio para conservar el tamaño aparente.
+const SUN_R = 600, SK = SUN_R / 36;
+const sky = new THREE.Group(); scene.add(sky);
+const sunGroup = new THREE.Group(); sky.add(sunGroup);
+const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(1.7 * SK, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd27a, fog: false, transparent: true }));
 sunGroup.add(sunDisc);
 function glowTexture() {
   const c = document.createElement("canvas"); c.width = c.height = 128;
@@ -746,9 +756,9 @@ function glowTexture() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), transparent: true, depthWrite: false, fog: false }));
-halo.scale.setScalar(12); sunGroup.add(halo);
+halo.scale.setScalar(12 * SK); sunGroup.add(halo);
 
-const arcGroup = new THREE.Group(); scene.add(arcGroup);
+const arcGroup = new THREE.Group(); sky.add(arcGroup);
 const hourTags = [];
 function buildSunPath() {
   arcGroup.clear(); hourTags.forEach(t => t.el.remove()); hourTags.length = 0;
@@ -761,10 +771,10 @@ function buildSunPath() {
     if (s.el > -.5) run.push(sunDir(s.az, Math.max(0, s.el)).multiplyScalar(SUN_R)); else flush();
     if (m % 60 === 0 && s.el > 1) {
       const p = sunDir(s.az, s.el).multiplyScalar(SUN_R);
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(.2, 8, 6), M.hourDot); dot.position.copy(p); arcGroup.add(dot);
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(.2 * SK, 8, 6), M.hourDot); dot.position.copy(p); arcGroup.add(dot);
       if ((m / 60) % 2 === 0) {
         const el = document.createElement("div"); el.className = "tag hour"; el.textContent = String(m / 60).padStart(2, "0") + ":00";
-        document.body.appendChild(el); hourTags.push({ el, p: p.clone().add(new THREE.Vector3(0, 1.6, 0)) });
+        document.body.appendChild(el); hourTags.push({ el, p: p.clone().add(new THREE.Vector3(0, 1.6 * SK, 0)), sky: true });
       }
     }
   }
@@ -774,11 +784,11 @@ const stars = (() => {
   const n = 500, pos = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
     const u = Math.random(), v = Math.random() * .92 + .06, th = u * Math.PI * 2, ph = Math.asin(v);
-    pos.set([Math.cos(th) * Math.cos(ph) * 140, Math.sin(ph) * 140, Math.sin(th) * Math.cos(ph) * 140], i * 3);
+    pos.set([Math.cos(th) * Math.cos(ph) * 900, Math.sin(ph) * 900, Math.sin(th) * Math.cos(ph) * 900], i * 3);
   }
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   const p = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf7f0e4, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false }));
-  scene.add(p); return p;
+  sky.add(p); return p;
 })();
 
 // Nubes: un solo InstancedMesh de bolas aplastadas (una llamada de dibujo). Se ven tantas como
@@ -808,7 +818,7 @@ function placeClouds(dt = 0) {
     if (dx * dx + dz * dz > CLOUD_R * CLOUD_R && dx * wind.x + dz * wind.z > 0) { c.x -= wind.x * CLOUD_R * 1.9; c.z -= wind.z * CLOUD_R * 1.9; }
     const show = THREE.MathUtils.clamp(cloud * CLOUDS * 1.1 - i, 0, 1);
     for (const p of c.puffs) {
-      const sz = p.r * show;
+      const sz = show < .5 ? 0 : p.r * (.6 + .8 * (show - .5));   // sin bolitas sueltas mientras aparece
       pC.set(c.x + p.dx, c.y + p.dy, c.z + p.dz); sC.set(sz, sz * .62, sz);
       mtxC.compose(pC, qC, sC); cloudMesh.setMatrixAt(n++, mtxC);
     }
@@ -861,12 +871,28 @@ function placeTags() {
   const w = innerWidth, h = innerHeight;
   // las de inversor, contador y transformador, solo de cerca
   for (const t of [...tags, ...compass, ...hourTags]) {
-    v3.copy(t.p).project(camera);
+    v3.copy(t.p); if (t.sky) v3.add(sky.position);
+    const wp = t.sky ? v3.clone() : t.p;
+    v3.project(camera);
     const vis = v3.z < 1 && v3.x > -1.2 && v3.x < 1.2 && v3.y > -1.2 && v3.y < 1.2 && (!t.near || camera.position.distanceTo(t.p) < (t.nearDist || 26));
-    t.el.hidden = !vis || (t.center && hiddenByHouse(t.p));
+    t.el.hidden = !vis || ((t.center || t.sky) && hiddenByHouse(wp));
     // sin meterse bajo la cabecera
     if (vis) t.el.style.transform = `translate(${((v3.x + 1) / 2 * w).toFixed(1)}px, ${Math.max(t.center ? 0 : 100, (1 - v3.y) / 2 * h).toFixed(1)}px) translate(-50%, ${t.center ? "-50%" : t.near ? "0" : "-100%"})`;
   }
+  // Sol fuera del encuadre: una píldora en el borde, en la dirección en que está (con su elevación).
+  const pin = $("tag-sun");
+  if (!sunGroup.visible || !sunInfo || sunInfo.el <= 0) { pin.hidden = true; return; }
+  const sp = sunGroup.position.clone().add(sky.position);
+  const cs = sp.clone().applyMatrix4(camera.matrixWorldInverse);     // espacio de la cámara: −z delante
+  const nd = sp.project(camera);
+  if (cs.z < 0 && Math.abs(nd.x) < .97 && Math.abs(nd.y) < .97) { pin.hidden = true; return; }
+  const ang = Math.atan2(cs.y, cs.x);
+  const hw = w / 2 - 50, hh = h / 2 - 95, c = Math.cos(ang), sn = Math.sin(ang);
+  const k = Math.min(hw / Math.max(1e-6, Math.abs(c)), hh / Math.max(1e-6, Math.abs(sn)));
+  pin.hidden = false;
+  $("sun-pin").textContent = "☀ " + nf0.format(sunInfo.el) + "°";
+  $("sun-arrow").style.transform = `rotate(${(-ang).toFixed(3)}rad)`;
+  pin.style.transform = `translate(${(w / 2 + c * k).toFixed(1)}px, ${(h / 2 + 10 - sn * k).toFixed(1)}px) translate(-50%, -50%)`;
 }
 
 /* ===================== paleta y sol ===================== */
@@ -925,7 +951,7 @@ function updateSun() {
     ray.visible = s.el > 0 && cos > 0;
     if (ray.visible) {
       const pos = rayGeo.attributes.position;
-      const a = PANEL_CENTER, b = sunGroup.position.clone().sub(a).normalize().multiplyScalar(20).add(a);
+      const a = PANEL_CENTER, b = sunGroup.position.clone().normalize().multiplyScalar(20).add(a);
       pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, b.x, b.y, b.z); pos.needsUpdate = true; ray.computeLineDistances();
     }
   }
@@ -1001,7 +1027,8 @@ function renderData() {
 let last = 0, needRender = true, looping = false, skyT = 0, skyAcc = 0;
 const FRAME = 1000 / 30;
 function requestRender() { needRender = true; if (!looping) requestAnimationFrame(drawOnce); }
-function drawOnce() { if (looping || !needRender) return; needRender = false; controls.update(); renderer.render(scene, camera); placeTags(); }
+function drawOnce() { if (looping || !needRender) return; needRender = false; controls.update(); sky.position.copy(camera.position);
+  cloudMat.opacity = .93 * THREE.MathUtils.clamp((30 - camera.position.y) / 14, .22, 1); renderer.render(scene, camera); placeTags(); }
 function loop(t) {
   if (!looping) return;
   requestAnimationFrame(loop);
@@ -1021,6 +1048,9 @@ function loop(t) {
   if (skyT > 4 && skyAcc > .005) { skyT = 0; skyAcc = 0; updateSun(); }
   placeClouds(dt);
   controls.update(dt);
+  sky.position.copy(camera.position);
+  // vista de pájaro por encima de las nubes: se aclaran para no tapar la casa
+  cloudMat.opacity = .93 * THREE.MathUtils.clamp((30 - camera.position.y) / 14, .22, 1);
   renderer.render(scene, camera);
   placeTags();
 }
@@ -1036,7 +1066,10 @@ function setMotion() {
     requestRender();
   } else if (!looping) { looping = true; last = performance.now(); requestAnimationFrame(loop); }
 }
-controls.addEventListener("change", () => { if (!looping) requestRender(); });
+controls.addEventListener("change", () => {
+  if (camera.position.y < 1.4) { camera.position.y = 1.4; camera.lookAt(controls.target); }
+  if (!looping) requestRender();
+});
 reduceMotion.addEventListener?.("change", setMotion);
 
 let orbit = true; try { orbit = localStorage.getItem("fv-panel-3d-giro") !== "off"; } catch (e) {}
