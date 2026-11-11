@@ -147,6 +147,7 @@ dialog input { font: inherit; color: var(--fg); background: transparent; border:
 <div class="tag grid" id="tag-grid"><span class="k">Grid</span><span class="w">–</span></div>
 <div class="tag small" id="tag-inv"><span class="k">Inverter</span><span class="w"><span class="dc" id="inv-dc">DC –</span><span class="ac" id="inv-ac">AC –</span></span></div>
 <div class="tag small" id="tag-meter"><span class="k">Meter</span></div>
+<div class="tag small" id="tag-trafo"><span class="k">Transformer</span><span class="w"><span id="tr-hv">HV –</span><span id="tr-lv">LV –</span></span></div>
 
 <dialog id="config">
   <form method="dialog" id="config-form">
@@ -185,6 +186,7 @@ const E = {
   weather: window.HA_CONFIG?.weather || "weather.forecast_home",   // met.no: cloud_coverage y viento
 };
 const INVERTER_W = 3000;
+const HV_V = window.HA_CONFIG?.hvVolts || 20000;   // media tensión de la distribución en Canarias
 const STORE = "fv-panel-conexion";
 const $ = id => document.getElementById(id);
 const nf0 = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 });
@@ -264,7 +266,7 @@ async function start() {
   call({ type: "subscribe_entities", entity_ids: Object.values(E) }).catch(() => {});
   try {
     const c = await call({ type: "get_config" });
-    if (Number.isFinite(c?.latitude) && Number.isFinite(c?.longitude)) { LAT = c.latitude; LON = c.longitude; buildSunPath(); updateSun(); }
+    if (Number.isFinite(c?.latitude) && Number.isFinite(c?.longitude)) { LAT = c.latitude; LON = c.longitude; buildSunPath(); updateSun(); renderData(); }
   } catch (e) {}
   calibrate();
 }
@@ -380,6 +382,7 @@ const M = {
   wall: new THREE.MeshLambertMaterial(),
   roof: new THREE.MeshLambertMaterial(),
   trim: new THREE.MeshLambertMaterial(),
+  trafo: new THREE.MeshLambertMaterial(),
   door: new THREE.MeshLambertMaterial(),
   window: new THREE.MeshLambertMaterial({ emissive: 0xffc06a }),
   frame: new THREE.MeshStandardMaterial({ metalness: .6, roughness: .4 }),
@@ -583,6 +586,58 @@ function sagPoints(a, b, sag, n = 24) {
   for (let i = 0; i <= n; i++) { const t = i / n, p = a.clone().lerp(b, t); p.y -= sag * 4 * t * (1 - t); pts.push(p); }
   return pts;
 }
+/* ---------- transformador de la torre: media tensión arriba, baja hacia la casa ---------- */
+// Cuba con aletas sobre una plataforma en la cara de la torre que mira a la casa; tres pasatapas
+// de alta arriba (puentes a las crucetas) y dos de baja en el costado (acometida a la casa).
+const TR = (() => {
+  const u = BRACKET.clone().sub(TOWER1).setY(0).normalize();
+  const g = new THREE.Group();
+  g.position.copy(TOWER1).add(u.clone().multiplyScalar(1.85)).setY(5.4);
+  g.rotation.y = Math.atan2(u.x, u.z);          // z local hacia la casa
+  g.scale.setScalar(1.3);                        // algo mayor que uno real, para verlo desde lejos
+  const add = (geo, mat, x, y, z, rx = 0) => { const m = shadowy(new THREE.Mesh(geo, mat)); m.position.set(x, y, z); m.rotation.x = rx; g.add(m); return m; };
+  add(new THREE.BoxGeometry(1.5, .08, 1.3), M.steel, 0, 0, -.15);                       // plataforma
+  for (const x of [-.6, .6]) {                                                           // ménsulas a la torre
+    const b = add(new THREE.BoxGeometry(.06, .06, 1.3), M.steel, x, -.55, -.5); b.rotation.x = -.7;
+  }
+  add(new THREE.CylinderGeometry(.42, .42, 1.05, 20), M.trafo, 0, .6, 0);               // cuba
+  add(new THREE.CylinderGeometry(.47, .47, .07, 20), M.trafo, 0, 1.16, 0);              // tapa
+  add(new THREE.CylinderGeometry(.47, .47, .06, 20), M.trafo, 0, .08, 0);
+  for (let i = 0; i < 14; i++) {                                                         // aletas de refrigeración
+    const a = i / 14 * Math.PI * 2, f = add(new THREE.BoxGeometry(.03, .85, .2), M.trafo, Math.sin(a) * .5, .6, Math.cos(a) * .5);
+    f.rotation.y = a;
+  }
+  // pasatapas: discos de porcelana apilados
+  const disc = new THREE.CylinderGeometry(.08, .08, .035, 10), core = new THREE.CylinderGeometry(.035, .035, .42, 8);
+  const hv = [-.25, 0, .25].map(x => {
+    add(core, M.trim, x, 1.4, -.1);
+    for (let k = 0; k < 5; k++) add(disc, M.trim, x, 1.24 + k * .08, -.1);
+    return new THREE.Vector3(x, 1.62, -.1);
+  });
+  const lv = [-.14, .14].map(x => {
+    add(new THREE.CylinderGeometry(.045, .045, .22, 8), M.trim, x, .95, .52, Math.PI / 2);
+    return new THREE.Vector3(x, .95, .64);
+  });
+  // placa de peligro
+  const sign = new THREE.Mesh(new THREE.CircleGeometry(.11, 3), new THREE.MeshBasicMaterial({ color: 0xf2c230 }));
+  sign.position.set(0, .45, .43); sign.rotation.z = Math.PI / 2; g.add(sign);
+  scene.add(g); g.updateMatrixWorld(true);
+  return { hv: hv.map(p => g.localToWorld(p)), lv: lv.map(p => g.localToWorld(p)), at: g.localToWorld(new THREE.Vector3(0, -.2, .9)) };
+})();
+// puentes de alta: dos crucetas bajas y la alta más cercana a cada pasatapas
+const TR_TIPS = [tips1[0], tips1[1], [tips1[2], tips1[3]].sort((a, b) => a.distanceTo(TR.hv[1]) - b.distanceTo(TR.hv[1]))[0]]
+  .sort((a, b) => a.distanceTo(TR.hv[0]) - b.distanceTo(TR.hv[0]));
+const jumpers = [];
+{
+  // asignar cada punta al pasatapas más cercano, sin repetir
+  const free = [...TR_TIPS];
+  for (const b of TR.hv) {
+    free.sort((a, c) => a.distanceTo(b) - c.distanceTo(b));
+    const tip = free.shift(); jumpers.push([b, tip]);
+    const c = new THREE.CatmullRomCurve3(sagPoints(b, tip, .35, 14));
+    scene.add(shadowy(new THREE.Mesh(new THREE.TubeGeometry(c, 20, .025, 4), M.cable), true, false));
+  }
+}
 for (let i = 0; i < 4; i++) for (const [A, B] of [[tips1, tips2], [tips2, tips3]]) {
   const c = new THREE.CatmullRomCurve3(sagPoints(A[i], B[i], 1.2));
   scene.add(shadowy(new THREE.Mesh(new THREE.TubeGeometry(c, 32, .03, 4), M.cable), true, false));
@@ -652,9 +707,9 @@ function flowWire(key, curve, segs = 160) {
   flowWire("ac", roundedPath([new THREE.Vector3(INV.x + .25, INV.y, zf), new THREE.Vector3(xo, INV.y, zf), new THREE.Vector3(xo, yo, zf),
     new THREE.Vector3(METER.x, yo, zf), new THREE.Vector3(METER.x, METER.y + .25, zf + .02)], .25));
 }
-// contador → soporte de la esquina → torre (punta de cruceta más cercana)
+// contador → soporte de la esquina → pasatapas de baja del transformador
 {
-  const tip = tips1.slice().sort((a, b) => a.distanceTo(BRACKET) - b.distanceTo(BRACKET))[0];
+  const tip = TR.lv[0];
   const zf = FRONT + .06;
   const xs = HW - .2;
   const wall = [new THREE.Vector3(METER.x + .18, METER.y, zf + .02), new THREE.Vector3(xs, METER.y, zf),
@@ -663,6 +718,16 @@ function flowWire(key, curve, segs = 160) {
   const path = roundedPath(wall, .2);
   path.add(new THREE.CatmullRomCurve3([BRACKET, ...span]));
   flowWire("grid", path, 260);
+  scene.add(shadowy(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(sagPoints(BRACKET, TR.lv[1], 1.1, 30)), 60, .03, 5), M.cable), true, false));
+}
+// alta: pasatapas → cruceta → siguiente torre → la de más allá, por la fase del puente central
+{
+  const [b, tip] = jumpers[1], i = tips1.indexOf(tip);
+  const path = new THREE.CurvePath();
+  path.add(new THREE.CatmullRomCurve3(sagPoints(b, tip, .35, 14)));
+  path.add(new THREE.CatmullRomCurve3(sagPoints(tip, tips2[i], 1.2, 24)));
+  path.add(new THREE.CatmullRomCurve3(sagPoints(tips2[i], tips3[i], 1.2, 24)));
+  flowWire("hv", path, 320);
 }
 // rayo del sol a las placas
 const rayGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
@@ -779,6 +844,7 @@ const tags = [
   { el: $("tag-grid"), p: TOWER1.clone().add(new THREE.Vector3(0, 14, 0)) },
   { el: $("tag-inv"), p: INV.clone().add(new THREE.Vector3(-.2, -.45, .2)), near: true },
   { el: $("tag-meter"), p: METER.clone().add(new THREE.Vector3(0, -.4, .2)), near: true },
+  { el: $("tag-trafo"), p: TR.at, near: true, nearDist: 36 },
 ];
 const compass = [["N", 0, -33], ["E", 33, 0], ["S", 0, 33], ["W", -33, 0]].map(([t, x, z]) => {
   const el = document.createElement("div"); el.className = "tag compass"; el.textContent = t; document.body.appendChild(el);
@@ -793,10 +859,10 @@ function hiddenByHouse(p) {
 }
 function placeTags() {
   const w = innerWidth, h = innerHeight;
-  const close = camera.position.distanceTo(INV) < 26;     // las de inversor y contador, solo de cerca
+  // las de inversor, contador y transformador, solo de cerca
   for (const t of [...tags, ...compass, ...hourTags]) {
     v3.copy(t.p).project(camera);
-    const vis = v3.z < 1 && v3.x > -1.2 && v3.x < 1.2 && v3.y > -1.2 && v3.y < 1.2 && (!t.near || close);
+    const vis = v3.z < 1 && v3.x > -1.2 && v3.x < 1.2 && v3.y > -1.2 && v3.y < 1.2 && (!t.near || camera.position.distanceTo(t.p) < (t.nearDist || 26));
     t.el.hidden = !vis || (t.center && hiddenByHouse(t.p));
     // sin meterse bajo la cabecera
     if (vis) t.el.style.transform = `translate(${((v3.x + 1) / 2 * w).toFixed(1)}px, ${Math.max(t.center ? 0 : 100, (1 - v3.y) / 2 * h).toFixed(1)}px) translate(-50%, ${t.center ? "-50%" : t.near ? "0" : "-100%"})`;
@@ -806,18 +872,18 @@ function placeTags() {
 /* ===================== paleta y sol ===================== */
 const PAL = {
   dark: { bgNight: 0x0e1a2b, bgDay: 0x2a4a75, ground: 0x1d3149, wall: 0xe8e0d2, roof: 0x4a5566, trim: 0xb9b2a6, door: 0x2a3a52,
-    window: 0x8fa3bb, steel: 0x7c8a9c, cable: 0x283548, box: 0xd8d2c6, leaf: 0x5f7d6a, trunk: 0x6b5848, ring: 0x3a4d68, arc: 0xf0a93b,
+    window: 0x8fa3bb, steel: 0x7c8a9c, trafo: 0x9aa6b4, cable: 0x283548, box: 0xd8d2c6, leaf: 0x5f7d6a, trunk: 0x6b5848, ring: 0x3a4d68, arc: 0xf0a93b,
     sun: 0xf0a93b, ac: 0x7fa7d6, home: 0xf7f0e4, out: 0x88a592, in: 0xe0785e, hemiSky: 0x9fb3cc, hemiGround: 0x1a2738,
     bgOvercast: 0x3d4859, cloud: 0xd3dae3, cloudDark: 0x6f7a88 },
   light: { bgNight: 0xd7d9dc, bgDay: 0xf7f0e4, ground: 0xebe2d1, wall: 0xfffaf1, roof: 0x5d6877, trim: 0xd9d0bf, door: 0x406896,
-    window: 0x9fb2c8, steel: 0x6e7b8c, cable: 0x2f3b4c, box: 0xf2ece1, leaf: 0x88a592, trunk: 0x8a7462, ring: 0xc9bea9, arc: 0xc07b10,
+    window: 0x9fb2c8, steel: 0x6e7b8c, trafo: 0xaab4bf, cable: 0x2f3b4c, box: 0xf2ece1, leaf: 0x88a592, trunk: 0x8a7462, ring: 0xc9bea9, arc: 0xc07b10,
     sun: 0xc07b10, ac: 0x406896, home: 0x0e1a2b, out: 0x4f6958, in: 0xb24a33, hemiSky: 0xffffff, hemiGround: 0xcbbfa8,
     bgOvercast: 0xdcdad6, cloud: 0xffffff, cloudDark: 0xa9b0b9 },
 };
 let pal = PAL.dark, isDark = true;
 function applyPalette() {
   pal = isDark ? PAL.dark : PAL.light;
-  for (const k of ["ground", "wall", "roof", "trim", "door", "window", "steel", "cable", "box", "leaf", "trunk"]) M[k].color.set(pal[k]);
+  for (const k of ["ground", "wall", "roof", "trim", "trafo", "door", "window", "steel", "cable", "box", "leaf", "trunk"]) M[k].color.set(pal[k]);
   M.frame.color.set(isDark ? 0xaab2bd : 0xc9ced6);
   M.panel.color.set(0xffffff);
   M.ring.color.set(pal.ring); M.arc.color.set(pal.arc); M.hourDot.color.set(pal.arc); M.ray.color.set(pal.sun);
@@ -876,10 +942,11 @@ function updateSun() {
 const compassName = az => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(az / 45) % 8];
 
 /* ===================== datos → escena ===================== */
-function setFlow(key, w, color, dir = 1) {
+function setFlow(key, w, color, dir = 1, thin = false) {
   const f = flows[key], on = w != null && w > 5, x = on ? Math.min(1, w / INVERTER_W) : 0;
   f.target.on = on ? 1 : 0;
-  f.target.r = .045 + .13 * Math.sqrt(x);
+  // en alta la misma potencia lleva unas 85 veces menos corriente: cable de flujo fino
+  f.target.r = thin ? .035 + .03 * Math.sqrt(x) : .045 + .13 * Math.sqrt(x);
   f.target.speed = on ? dir * (1.2 + 5 * x) : 0;
   f.u.uColor.value.set(color);
   f.u.uBase.value = isDark ? .22 : .3;
@@ -894,9 +961,13 @@ function renderData() {
   const V = v => nf0.format(v) + " V";
   $("inv-dc").textContent = dcv != null && dca != null ? `DC ${V(dcv)} · ${nf1.format(dca)} A` : "DC –";
   $("inv-ac").textContent = acp != null ? `AC ${acv != null ? V(acv) + " · " : ""}${nf0.format(acp)} W` : "AC –";
-  if (grid != null && grid < -5) setFlow("grid", exp, pal.out, 1);
-  else if (grid != null && grid > 5) setFlow("grid", imp, pal.in, -1);
-  else setFlow("grid", 0, pal.out, 1);
+  const gw = grid == null ? null : Math.abs(grid) > 5 ? Math.abs(grid) : 0;
+  const gc = grid != null && grid > 5 ? pal.in : pal.out, gd = grid != null && grid > 5 ? -1 : 1;
+  setFlow("grid", gw, gc, gd);
+  setFlow("hv", gw, gc, gd, true);        // el camino de alta sale del transformador: mismo sentido que la acometida
+  const lvV = acv || 230;
+  $("tr-hv").textContent = gw != null ? `HV ${nf0.format(HV_V / 1000)} kV · ${(gw / HV_V).toFixed(3)} A` : "HV –";
+  $("tr-lv").textContent = gw != null ? `LV ${V(lvV)} · ${nf1.format(gw / lvV)} A` : "LV –";
   // placas que brillan un poco con la producción, ventanas con el consumo, LED del inversor
   const xp = pv ? Math.min(1, pv / INVERTER_W) : 0;
   M.panel.emissive.set(pal.sun); M.panel.emissiveIntensity = .12 * xp;

@@ -63,6 +63,11 @@ se elige con `window.HA_CONFIG.weather`. Las nubes se mueven con el viento de
 met.no. Cable de continua (placas → inversor) en ámbar y de alterna (inversor →
 contador) en acero.
 
+Transformador (1.9.0): en la torre, con la acometida de la casa en su lado de
+baja y tres puentes a las crucetas en el de alta; el flujo sigue por la línea de
+media tensión, más fino (a 20 kV la misma potencia lleva unas 85 veces menos
+corriente). La tensión de alta es `window.HA_CONFIG.hvVolts` (20000 si no se pone).
+
 ## Desarrollo
 
 `~/AIWork/solar-panel/index.html` en el Mac es un enlace a `www/index.html`;
