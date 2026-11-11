@@ -1,7 +1,8 @@
 """Vigía Fedecanat: avisa cuando cambia una carpeta compartida de la federación.
 
-Cada `intervalo_min` lista la carpeta del owncloud de la Federación Canaria de
-Natación (WebDAV público, PROPFIND con Depth: infinity). Si aparece un archivo
+Cada `intervalo_min` lista las carpetas del owncloud de la Federación Canaria de
+Natación (`carpetas` en la config, o `carpeta` si es una sola; WebDAV público,
+PROPFIND con Depth: infinity). Si aparece un archivo
 o una carpeta, o cambia uno que ya estaba, llama al webhook de Home Assistant,
 que manda el aviso al iPhone. Además sirve una página de estado en el puerto 8080.
 
@@ -54,10 +55,29 @@ def fmt(iso):
     return canarias(dt.datetime.fromisoformat(iso)).strftime("%d/%m/%Y %H:%M")
 
 
-def listar(cfg):
-    """Devuelve {ruta: {etag, mod, tam, carpeta}} de todo lo que cuelga de cfg['carpeta']."""
+def raices(cfg):
+    """Carpetas vigiladas: `carpetas` (lista) o, en configs antiguas, `carpeta`."""
+    return cfg.get("carpetas") or [cfg["carpeta"]]
+
+
+def raiz_de(ruta, roots):
+    return next((r for r in roots if ruta.startswith(r)), roots[0])
+
+
+def titulo_raiz(raiz):
+    """«/2-TENERIFE/» → «Tenerife»; «/COPA DE CLUBS/» → «Copa de clubs»."""
+    return raiz.strip("/").split("/")[0].split("-", 1)[-1].capitalize()
+
+
+def enlace_a(cfg, dir_):
+    return f"{cfg['servidor'].rstrip('/')}/owncloud/index.php/s/{cfg['share_token']}?path=" + \
+        urllib.parse.quote(dir_.rstrip("/") or "/", safe="")
+
+
+def listar(cfg, raiz):
+    """Devuelve {ruta: {etag, mod, tam, carpeta}} de todo lo que cuelga de la carpeta `raiz`."""
     base = cfg["servidor"].rstrip("/")
-    carpeta = urllib.parse.quote(cfg["carpeta"])
+    carpeta = urllib.parse.quote(raiz)
     auth = base64.b64encode((cfg["share_token"] + ":").encode()).decode()
     req = urllib.request.Request(f"{base}{DAV}{carpeta}", method="PROPFIND",
                                  headers={"Depth": "infinity", "Authorization": f"Basic {auth}"})
@@ -84,8 +104,7 @@ def avisar(cfg, titulo, mensaje, ruta=None):
     enlace = cfg["enlace"]
     if ruta:
         dir_ = ruta if ruta.endswith("/") else ruta.rsplit("/", 1)[0] + "/"
-        enlace = f"{cfg['servidor'].rstrip('/')}/owncloud/index.php/s/{cfg['share_token']}?path=" + \
-            urllib.parse.quote(dir_.rstrip("/") or "/", safe="")
+        enlace = enlace_a(cfg, dir_)
     cuerpo = json.dumps({"title": titulo, "message": mensaje, "url": enlace}).encode()
     req = urllib.request.Request(cfg["webhook"], data=cuerpo, method="POST",
                                  headers={"Content-Type": "application/json"})
@@ -110,8 +129,11 @@ def comprobar():
     with lock:
         est = cargar(ESTADO, {})
         est["ultima_comprobacion"] = ahora().isoformat()
+        roots = raices(cfg)
         try:
-            items = listar(cfg)
+            items = {}
+            for r in roots:
+                items.update(listar(cfg, r))
         except Exception as e:  # red caída, servidor fuera, enlace retirado...
             est["error"] = f"{type(e).__name__}: {e}"
             est.setdefault("fallando_desde", ahora().isoformat())
@@ -135,20 +157,37 @@ def comprobar():
             est.pop(k, None)
 
         antes = est.get("items")
-        raiz = cfg["carpeta"]
+        nombres = ", ".join(r.strip("/") for r in roots)
         if antes is None:
-            est["items"] = items
+            est["items"], est["raices"] = items, roots
             n = sum(1 for i in items.values() if not i["carpeta"])
-            anotar(est, f"Primera lectura: {n} archivo(s) en {raiz}")
+            anotar(est, f"Primera lectura: {n} archivo(s) en {nombres}")
             try:
                 avisar(cfg, "Vigía Fedecanat activo",
-                       f"Vigilo {raiz.strip('/')} cada {cfg['intervalo_min']} min. Ahora hay {n} archivo(s).")
+                       f"Vigilo {nombres} cada {cfg['intervalo_min']} min. Ahora hay {n} archivo(s).")
             except Exception as e:
                 anotar(est, f"No se pudo mandar el aviso de inicio: {e}")
             guardar(ESTADO, est)
             return
 
-        nuevos = [r for r in items if r not in antes and r != raiz]
+        # Carpetas recién añadidas a la config: lo que ya tienen se da por visto, sin avisar de cada archivo.
+        # (Un estado de la 1.0 no guarda `raices`: valen las carpetas de las que ya hay algo leído.)
+        vistas = est.get("raices") or [r for r in roots if any(k.startswith(r) for k in antes)]
+        for r in [r for r in roots if r not in vistas]:
+            suyos = {k: v for k, v in items.items() if k.startswith(r)}
+            antes.update(suyos)
+            n = sum(1 for i in suyos.values() if not i["carpeta"])
+            anotar(est, f"Carpeta añadida: {r.strip('/')} ({n} archivo(s), se dan por vistos)")
+            try:
+                avisar(cfg, "Vigía Fedecanat", f"Ahora también vigilo {r.strip('/')}. Hay {n} archivo(s).", r)
+            except Exception as e:
+                anotar(est, f"No se pudo avisar de la carpeta añadida: {e}")
+        # Lo de carpetas que ya no se vigilan se olvida sin avisar
+        for k in [k for k in antes if not any(k.startswith(r) for r in roots)]:
+            antes.pop(k)
+        est["raices"] = roots
+
+        nuevos = [r for r in items if r not in antes and r not in roots]
         cambiados = [r for r in items if r in antes and not items[r]["carpeta"]
                      and items[r]["etag"] != antes[r]["etag"]]
         borrados = [r for r in antes if r not in items]
@@ -163,10 +202,11 @@ def comprobar():
             anotar(est, f"Retirado: {nombre(r)}")
         if lineas:
             primero = (nuevos_arch + nuevas_carp + cambiados)[0]
+            raiz = raiz_de(primero, roots)
             sitio = nombre(primero.rstrip("/").rsplit("/", 1)[0] + "/") if not items[primero]["carpeta"] else raiz.strip("/")
             msg = "\n".join(lineas[:4]) + (f"\n… y {len(lineas) - 4} más" if len(lineas) > 4 else "") + f"\n({sitio})"
             try:
-                avisar(cfg, "Fedecanat · " + raiz.strip("/").split("-", 1)[-1].title(), msg, primero)
+                avisar(cfg, "Fedecanat · " + titulo_raiz(raiz), msg, primero)
                 for l in lineas:
                     anotar(est, l + " — avisado")
                 est["items"] = items
@@ -212,7 +252,7 @@ form{display:inline} button{font:inherit;border:1px solid var(--line);background
 <div class="card row">
 <div><span>Última comprobación</span>%(ultima)s</div>
 <div><span>Estado</span>%(estado)s</div>
-<div><span>Carpeta</span><a href="%(enlace)s" target="_blank" rel="noopener">abrir en la web</a></div>
+<div><span>Carpetas</span>%(enlaces)s</div>
 </div>
 <div class="row">
 <form method="post" action="comprobar"><button>Comprobar ahora</button></form>
@@ -230,11 +270,12 @@ class Web(BaseHTTPRequestHandler):
     def do_GET(self):
         cfg, est = cargar(CONFIG, {}), cargar(ESTADO, {})
         items = est.get("items") or {}
+        roots = raices(cfg) if cfg else ["/"]
         filas = []
         for r in sorted(items):
             i = items[r]
-            prof = r.strip("/").count("/") - cfg.get("carpeta", "/").strip("/").count("/")
-            sangria = "&nbsp;" * 4 * max(prof - 1, 0)
+            prof = r.strip("/").count("/") - raiz_de(r, roots).strip("/").count("/")
+            sangria = "&nbsp;" * 4 * max(prof, 0)
             tam = f"{i['tam'] / 1024:.0f} KB" if not i["carpeta"] else ""
             filas.append(f"<tr class='{'dir' if i['carpeta'] else ''}'><td>{sangria}{html.escape(nombre(r) or r)}"
                          f"{'/' if i['carpeta'] else ''}</td><td class='r'>{tam}</td><td class='r'>{fmt(i['mod'])}</td></tr>")
@@ -243,9 +284,10 @@ class Web(BaseHTTPRequestHandler):
         estado = "Correcto" if not est.get("error") else \
             f"<span class='bad'>Sin poder leer desde {fmt(est.get('fallando_desde'))}: {html.escape(est['error'][:200])}</span>"
         cuerpo = PAGINA % {
-            "carpeta": html.escape(cfg.get("carpeta", "")), "intervalo": cfg.get("intervalo_min", 15),
+            "carpeta": html.escape(", ".join(r.strip("/") for r in roots)), "intervalo": cfg.get("intervalo_min", 15),
             "ultima": fmt(est.get("ultima_comprobacion")), "estado": estado,
-            "enlace": html.escape(cfg.get("enlace", "#")),
+            "enlaces": " · ".join(f"<a href='{html.escape(enlace_a(cfg, r))}' target='_blank' rel='noopener'>"
+                                   f"{html.escape(r.strip('/'))}</a>" for r in roots) if cfg else "—",
             "items": "".join(filas) or "<tr><td>Todavía sin leer.</td></tr>",
             "eventos": "".join(eventos) or "<tr><td>Sin eventos.</td></tr>",
         }
