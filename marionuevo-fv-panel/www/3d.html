@@ -13,7 +13,7 @@
    que index.html: noche, cal, acero, salvia y ámbar solar. */
 :root {
   --bg: #0e1a2b; --panel: rgba(18, 33, 58, .78); --fg: #f7f0e4; --muted: #8f9cad; --line: #22344d;
-  --sun: #f0a93b; --home: #f7f0e4; --grid-out: #88a592; --grid-in: #e0785e;
+  --sun: #f0a93b; --home: #f7f0e4; --grid-out: #88a592; --grid-in: #e0785e; --ac: #7fa7d6;
   --font-display: "Varela Round", "Nunito", system-ui, sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   color-scheme: dark;
@@ -21,13 +21,13 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     --bg: #f7f0e4; --panel: rgba(255, 250, 241, .8); --fg: #0e1a2b; --muted: #5d6877; --line: #e2d8c6;
-    --sun: #c07b10; --home: #0e1a2b; --grid-out: #4f6958; --grid-in: #b24a33;
+    --sun: #c07b10; --home: #0e1a2b; --grid-out: #4f6958; --grid-in: #b24a33; --ac: #406896;
     color-scheme: light;
   }
 }
 :root[data-theme="light"] {
   --bg: #f7f0e4; --panel: rgba(255, 250, 241, .8); --fg: #0e1a2b; --muted: #5d6877; --line: #e2d8c6;
-  --sun: #c07b10; --home: #0e1a2b; --grid-out: #4f6958; --grid-in: #b24a33;
+  --sun: #c07b10; --home: #0e1a2b; --grid-out: #4f6958; --grid-in: #b24a33; --ac: #406896;
   color-scheme: light;
 }
 * { box-sizing: border-box; }
@@ -83,6 +83,11 @@ body {
 .tag.pv .w { color: var(--sun); }
 .tag.grid.out .w { color: var(--grid-out); }
 .tag.grid.in .w { color: var(--grid-in); }
+.tag.small .k { background: var(--panel); border-radius: 6px; padding: 0 6px; color: var(--fg); }
+.tag.small .w { font-size: .78rem; display: grid; gap: 0; text-align: left; }
+.tag .dc { color: var(--sun); }
+.tag .ac { color: var(--ac); }
+.sun .sky { grid-column: span 3; font-size: .9rem; }
 .tag.hour { font-family: var(--font-num); font-size: .68rem; color: var(--muted); }
 .tag.compass { font-family: var(--font-num); font-size: .8rem; color: var(--muted); }
 .tag[hidden] { display: none; }
@@ -131,6 +136,8 @@ dialog input { font: inherit; color: var(--fg); background: transparent; border:
       <span class="label">Elevation</span><span class="label">Azimuth</span><span class="label">On panels</span>
       <span class="v" id="sun-el">–</span><span class="v" id="sun-az">–</span><span class="v" id="sun-inc">–</span>
       <span class="label" id="sun-rise" style="grid-column: span 3; margin-top: 4px"></span>
+      <span class="label" style="grid-column: span 3; margin-top: 8px">Sky</span>
+      <span class="sky" id="sky">–</span>
     </section>
   </div>
 </div>
@@ -138,6 +145,8 @@ dialog input { font: inherit; color: var(--fg); background: transparent; border:
 <div class="tag pv" id="tag-pv"><span class="k">Panels</span><span class="w">–</span></div>
 <div class="tag home" id="tag-home"><span class="k">Home</span><span class="w">–</span></div>
 <div class="tag grid" id="tag-grid"><span class="k">Grid</span><span class="w">–</span></div>
+<div class="tag small" id="tag-inv"><span class="k">Inverter</span><span class="w"><span class="dc" id="inv-dc">DC –</span><span class="ac" id="inv-ac">AC –</span></span></div>
+<div class="tag small" id="tag-meter"><span class="k">Meter</span></div>
 
 <dialog id="config">
   <form method="dialog" id="config-form">
@@ -169,6 +178,11 @@ const E = {
   load: "sensor.solarnet_power_load_consumed",
   grid: "sensor.solarnet_power_grid",           // + compra, − vierte
   sun: "sun.sun",
+  acp: "sensor.primo_3_0_1_ac_power",
+  acv: "sensor.primo_3_0_1_ac_voltage",
+  dcv: "sensor.primo_3_0_1_dc_voltage",
+  dca: "sensor.primo_3_0_1_dc_current",
+  weather: window.HA_CONFIG?.weather || "weather.forecast_home",   // met.no: cloud_coverage y viento
 };
 const INVERTER_W = 3000;
 const STORE = "fv-panel-conexion";
@@ -251,6 +265,43 @@ async function start() {
   try {
     const c = await call({ type: "get_config" });
     if (Number.isFinite(c?.latitude) && Number.isFinite(c?.longitude)) { LAT = c.latitude; LON = c.longitude; buildSunPath(); updateSun(); }
+  } catch (e) {}
+  calibrate();
+}
+
+/* ---------- cielo despejado ---------- */
+// Irradiancia en el plano de las placas con cielo despejado: directa de Meinel (masa de aire de
+// Kasten-Young) por el coseno de incidencia, más un 10 % de difusa. La ganancia (W de las placas
+// por W/m²) sale del histórico: el percentil 95 de producción / irradiancia de los últimos 10 días
+// (estadísticas de 5 min), sin los ratos recortados por el inversor. Con eso, producción / lo que
+// tocaría ahora = cuánto sol pasa entre las nubes.
+function clearSkyPOA(ms) {
+  if (LAT == null) return 0;
+  const s = solarPosition(ms, LAT, LON); if (s.el <= 1) return 0;
+  const cos = Math.max(0, sunDir(s.az, s.el).dot(PANEL_NORMAL));
+  const am = 1 / (Math.sin(s.el * RAD) + 0.50572 * Math.pow(s.el + 6.07995, -1.6364));
+  const dni = 1353 * Math.pow(0.7, Math.pow(am, 0.678));
+  return dni * cos + 0.1 * dni * (1 + Math.cos(PITCH)) / 2;
+}
+const GAIN_KEY = "fv-panel-3d-ganancia";
+let gain = null;
+try { const g = JSON.parse(localStorage.getItem(GAIN_KEY) || "null"); if (g?.g > 0) gain = g.g; } catch (e) {}
+async function calibrate() {
+  try { const g = JSON.parse(localStorage.getItem(GAIN_KEY) || "null"); if (g?.g > 0 && Date.now() - g.t < 864e5) { gain = g.g; return; } } catch (e) {}
+  if (LAT == null) return;
+  try {
+    const r = await call({ type: "recorder/statistics_during_period", start_time: new Date(Date.now() - 10 * 864e5).toISOString(),
+      statistic_ids: [E.pv], period: "5minute", types: ["mean"] });
+    const ratios = [];
+    for (const p of r[E.pv] || []) {
+      const g = clearSkyPOA(p.start + 150000);
+      if (g > 300 && p.mean != null && p.mean < INVERTER_W * .95) ratios.push(p.mean / g);
+    }
+    if (ratios.length < 200) return;
+    ratios.sort((a, b) => a - b);
+    gain = ratios[Math.floor(ratios.length * .95)];
+    try { localStorage.setItem(GAIN_KEY, JSON.stringify({ g: gain, t: Date.now() })); } catch (e) {}
+    renderData();
   } catch (e) {}
 }
 function onEntities(ev) {
@@ -371,9 +422,6 @@ const house = new THREE.Group(); scene.add(house);
   const g = new THREE.ExtrudeGeometry(s, { depth: HL * 2, bevelEnabled: false });
   g.translate(0, 0, -HL);
   house.add(shadowy(new THREE.Mesh(g, M.wall)));
-  // zócalo
-  const base = shadowy(new THREE.Mesh(new THREE.BoxGeometry(HW * 2 + .12, .35, HL * 2 + .12), M.trim), false, true);
-  base.position.y = .175; house.add(base);
 }
 // faldones: grupos girados sobre la cumbrera; en el del oeste, x local sube hacia la cumbrera
 // y la y local es la normal del tejado (hacia el oeste y arriba)
@@ -445,7 +493,18 @@ const PANEL_CENTER = arrayLocal(FROM_RIDGE + ROWS * (PH + GAP) / 2, 0);
 // puertas, ventanas, inversor y contador
 function box(w, h, d, mat, x, y, z, cast = true) { const m = shadowy(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat), cast, true); m.position.set(x, y, z); house.add(m); return m; }
 const FRONT = HL + .02;
-box(1.05, 2.15, .08, M.door, -.6, 1.08, FRONT, false);
+// zócalo de 35 cm alrededor de la casa, cortado en la puerta; la puerta arranca de un escalón
+const DOOR_X = -.6, DOOR_W = 1.05, PL = .06, PLH = .35;
+box(HW * 2 + PL * 2, PLH, PL * 2, M.trim, 0, PLH / 2, -HL, false);
+box(PL * 2, PLH, HL * 2, M.trim, HW, PLH / 2, 0, false);
+box(PL * 2, PLH, HL * 2, M.trim, -HW, PLH / 2, 0, false);
+{
+  const a = -HW - PL, b = DOOR_X - DOOR_W / 2 - .02, c = DOOR_X + DOOR_W / 2 + .02, d = HW + PL;
+  box(b - a, PLH, PL * 2, M.trim, (a + b) / 2, PLH / 2, HL, false);
+  box(d - c, PLH, PL * 2, M.trim, (c + d) / 2, PLH / 2, HL, false);
+}
+box(DOOR_W + .3, .14, .45, M.trim, DOOR_X, .07, HL + .22, false);
+box(DOOR_W, 2.05, .08, M.door, DOOR_X, .14 + 2.05 / 2, FRONT, false);
 box(1.3, 1.15, .06, M.window, 1.9, 1.75, FRONT, false);
 box(1.3, 1.15, .06, M.window, 1.9, 1.75, -FRONT, false);
 box(1.3, 1.15, .06, M.window, -1.9, 1.75, -FRONT, false);
@@ -587,8 +646,10 @@ function flowWire(key, curve, segs = 160) {
   const y = WALL - .35, zf = FRONT + .06;
   // entra por arriba al inversor y sale por su costado, por encima de la puerta y la ventana
   const yo = 2.45, xo = INV.x + .55;
-  flowWire("pv", roundedPath([p0, p1, new THREE.Vector3(p1.x, y, zf), new THREE.Vector3(INV.x, y, zf),
-    new THREE.Vector3(INV.x, INV.y, zf), new THREE.Vector3(xo, INV.y, zf), new THREE.Vector3(xo, yo, zf),
+  // continua de las placas al inversor; alterna del inversor al contador (cuadro)
+  flowWire("dc", roundedPath([p0, p1, new THREE.Vector3(p1.x, y, zf), new THREE.Vector3(INV.x, y, zf),
+    new THREE.Vector3(INV.x, INV.y + .31, zf)], .25));
+  flowWire("ac", roundedPath([new THREE.Vector3(INV.x + .25, INV.y, zf), new THREE.Vector3(xo, INV.y, zf), new THREE.Vector3(xo, yo, zf),
     new THREE.Vector3(METER.x, yo, zf), new THREE.Vector3(METER.x, METER.y + .25, zf + .02)], .25));
 }
 // contador → soporte de la esquina → torre (punta de cruceta más cercana)
@@ -610,7 +671,7 @@ const ray = new THREE.Line(rayGeo, M.ray); scene.add(ray);
 /* ---------- sol, arco del día y estrellas ---------- */
 const SUN_R = 36;
 const sunGroup = new THREE.Group(); scene.add(sunGroup);
-const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(1.7, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd27a, fog: false }));
+const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(1.7, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd27a, fog: false, transparent: true }));
 sunGroup.add(sunDisc);
 function glowTexture() {
   const c = document.createElement("canvas"); c.width = c.height = 128;
@@ -655,25 +716,90 @@ const stars = (() => {
   scene.add(p); return p;
 })();
 
+// Nubes: un solo InstancedMesh de bolas aplastadas (una llamada de dibujo). Se ven tantas como
+// diga la nubosidad y se mueven con el viento de met.no.
+const CLOUDS = 16, PUFFS = 6;
+const cloudMat = new THREE.MeshLambertMaterial({ flatShading: true, transparent: true, opacity: .93 });
+const cloudMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), cloudMat, CLOUDS * PUFFS);
+cloudMesh.frustumCulled = false;
+scene.add(cloudMesh);
+const CLOUD_C = new THREE.Vector3(5, 0, 5), CLOUD_R = 48;
+const clouds = Array.from({ length: CLOUDS }, (_, i) => {
+  const a = i * 2.39996, r = Math.sqrt((i + .5) / CLOUDS) * CLOUD_R;     // espiral de Vogel: repartidas
+  return {
+    x: CLOUD_C.x + Math.cos(a) * r, z: CLOUD_C.z + Math.sin(a) * r, y: 21 + (i * 7 % 8),
+    puffs: Array.from({ length: PUFFS }, (_, k) => ({ dx: (k - 2.5) * 1.1 + Math.sin(i * 3 + k) * .6, dy: Math.cos(i + k * 2) * .35 + (k % 3 === 1 ? .5 : 0),
+      dz: Math.sin(i * 5 + k * 1.7) * 1.0, r: 1.1 + ((i + k) % 4) * .3 })),
+  };
+});
+let cloud = 0, cloudTarget = 0, cloudSrc = null, cloudSeen = false;   // 0 despejado … 1 cubierto
+const wind = new THREE.Vector3(1, 0, 0); let windSpeed = .8;
+const mtxC = new THREE.Matrix4(), qC = new THREE.Quaternion(), sC = new THREE.Vector3(), pC = new THREE.Vector3();
+function placeClouds(dt = 0) {
+  let n = 0;
+  clouds.forEach((c, i) => {
+    c.x += wind.x * windSpeed * dt; c.z += wind.z * windSpeed * dt;
+    const dx = c.x - CLOUD_C.x, dz = c.z - CLOUD_C.z;
+    if (dx * dx + dz * dz > CLOUD_R * CLOUD_R && dx * wind.x + dz * wind.z > 0) { c.x -= wind.x * CLOUD_R * 1.9; c.z -= wind.z * CLOUD_R * 1.9; }
+    const show = THREE.MathUtils.clamp(cloud * CLOUDS * 1.1 - i, 0, 1);
+    for (const p of c.puffs) {
+      const sz = p.r * show;
+      pC.set(c.x + p.dx, c.y + p.dy, c.z + p.dz); sC.set(sz, sz * .62, sz);
+      mtxC.compose(pC, qC, sC); cloudMesh.setMatrixAt(n++, mtxC);
+    }
+  });
+  cloudMesh.instanceMatrix.needsUpdate = true;
+}
+placeClouds();
+function updateClouds() {
+  const pv = num("pv"), w = states[E.weather]?.a || {};
+  const exp = gain ? Math.min(INVERTER_W, gain * clearSkyPOA(Date.now())) : 0;
+  if (gain && exp > 250 && pv != null) {
+    const kt = pv >= INVERTER_W * .95 ? 1 : pv / exp;
+    cloudTarget = THREE.MathUtils.clamp((.95 - kt) / .8, 0, 1);
+    cloudSrc = { kt: Math.min(1, kt), exp };
+  } else if (Number.isFinite(w.cloud_coverage)) { cloudTarget = w.cloud_coverage / 100; cloudSrc = { cc: w.cloud_coverage }; }
+  else { cloudTarget = 0; cloudSrc = null; }
+  if (Number.isFinite(w.wind_bearing)) { const b = (w.wind_bearing + 180) * RAD; wind.set(Math.sin(b), 0, -Math.cos(b)); }   // sopla hacia
+  if (Number.isFinite(w.wind_speed)) windSpeed = .3 + Math.min(60, w.wind_speed) * .012;
+  const name = cloudTarget < .15 ? "Clear" : cloudTarget < .4 ? "Some clouds" : cloudTarget < .7 ? "Cloudy" : "Overcast";
+  const sky = $("sky");
+  if (cloudSrc?.kt != null) {
+    sky.textContent = `${name} · ${Math.round(cloudSrc.kt * 100)}% of clear-sky output (~${nf0.format(Math.round(cloudSrc.exp / 10) * 10)} W)`;
+    sky.title = "Production compared with what these panels make under a clear sky at this sun position" + (Number.isFinite(w.cloud_coverage) ? ` · met.no: ${nf0.format(w.cloud_coverage)}% cloud cover` : "");
+  } else if (cloudSrc?.cc != null) { sky.textContent = `${name} · ${nf0.format(cloudSrc.cc)}% cloud cover (met.no)`; sky.title = ""; }
+  else { sky.textContent = "–"; sky.title = ""; }
+  if (!looping || (cloudSrc && !cloudSeen)) { cloudSeen = !!cloudSrc; cloud = cloudTarget; placeClouds(); updateSun(); }
+}
+
 /* ---------- etiquetas ---------- */
 const tags = [
   { el: $("tag-pv"), p: PANEL_CENTER.clone().add(PANEL_NORMAL.clone().multiplyScalar(1.6)) },
   { el: $("tag-home"), p: new THREE.Vector3(.4, RIDGE + 1.6, HL - 1) },
   { el: $("tag-grid"), p: TOWER1.clone().add(new THREE.Vector3(0, 14, 0)) },
+  { el: $("tag-inv"), p: INV.clone().add(new THREE.Vector3(-.2, -.45, .2)), near: true },
+  { el: $("tag-meter"), p: METER.clone().add(new THREE.Vector3(0, -.4, .2)), near: true },
 ];
 const compass = [["N", 0, -33], ["E", 33, 0], ["S", 0, 33], ["W", -33, 0]].map(([t, x, z]) => {
   const el = document.createElement("div"); el.className = "tag compass"; el.textContent = t; document.body.appendChild(el);
   return { el, p: new THREE.Vector3(x, .3, z), center: true };
 });
-const v3 = new THREE.Vector3();
+const v3 = new THREE.Vector3(), ray3 = new THREE.Raycaster(), toTag = new THREE.Vector3();
+// la rosa de los vientos y las horas no se pintan a través de la casa
+function hiddenByHouse(p) {
+  toTag.copy(p).sub(camera.position); const d = toTag.length();
+  ray3.set(camera.position, toTag.divideScalar(d)); ray3.far = d;
+  return ray3.intersectObject(house, true).length > 0;
+}
 function placeTags() {
   const w = innerWidth, h = innerHeight;
+  const close = camera.position.distanceTo(INV) < 26;     // las de inversor y contador, solo de cerca
   for (const t of [...tags, ...compass, ...hourTags]) {
     v3.copy(t.p).project(camera);
-    const vis = v3.z < 1 && v3.x > -1.2 && v3.x < 1.2 && v3.y > -1.2 && v3.y < 1.2;
-    t.el.hidden = !vis;
+    const vis = v3.z < 1 && v3.x > -1.2 && v3.x < 1.2 && v3.y > -1.2 && v3.y < 1.2 && (!t.near || close);
+    t.el.hidden = !vis || (t.center && hiddenByHouse(t.p));
     // sin meterse bajo la cabecera
-    if (vis) t.el.style.transform = `translate(${((v3.x + 1) / 2 * w).toFixed(1)}px, ${Math.max(t.center ? 0 : 100, (1 - v3.y) / 2 * h).toFixed(1)}px) translate(-50%, ${t.center ? "-50%" : "-100%"})`;
+    if (vis) t.el.style.transform = `translate(${((v3.x + 1) / 2 * w).toFixed(1)}px, ${Math.max(t.center ? 0 : 100, (1 - v3.y) / 2 * h).toFixed(1)}px) translate(-50%, ${t.center ? "-50%" : t.near ? "0" : "-100%"})`;
   }
 }
 
@@ -681,10 +807,12 @@ function placeTags() {
 const PAL = {
   dark: { bgNight: 0x0e1a2b, bgDay: 0x2a4a75, ground: 0x1d3149, wall: 0xe8e0d2, roof: 0x4a5566, trim: 0xb9b2a6, door: 0x2a3a52,
     window: 0x8fa3bb, steel: 0x7c8a9c, cable: 0x283548, box: 0xd8d2c6, leaf: 0x5f7d6a, trunk: 0x6b5848, ring: 0x3a4d68, arc: 0xf0a93b,
-    sun: 0xf0a93b, home: 0xf7f0e4, out: 0x88a592, in: 0xe0785e, hemiSky: 0x9fb3cc, hemiGround: 0x1a2738 },
+    sun: 0xf0a93b, ac: 0x7fa7d6, home: 0xf7f0e4, out: 0x88a592, in: 0xe0785e, hemiSky: 0x9fb3cc, hemiGround: 0x1a2738,
+    bgOvercast: 0x3d4859, cloud: 0xd3dae3, cloudDark: 0x6f7a88 },
   light: { bgNight: 0xd7d9dc, bgDay: 0xf7f0e4, ground: 0xebe2d1, wall: 0xfffaf1, roof: 0x5d6877, trim: 0xd9d0bf, door: 0x406896,
     window: 0x9fb2c8, steel: 0x6e7b8c, cable: 0x2f3b4c, box: 0xf2ece1, leaf: 0x88a592, trunk: 0x8a7462, ring: 0xc9bea9, arc: 0xc07b10,
-    sun: 0xc07b10, home: 0x0e1a2b, out: 0x4f6958, in: 0xb24a33, hemiSky: 0xffffff, hemiGround: 0xcbbfa8 },
+    sun: 0xc07b10, ac: 0x406896, home: 0x0e1a2b, out: 0x4f6958, in: 0xb24a33, hemiSky: 0xffffff, hemiGround: 0xcbbfa8,
+    bgOvercast: 0xdcdad6, cloud: 0xffffff, cloudDark: 0xa9b0b9 },
 };
 let pal = PAL.dark, isDark = true;
 function applyPalette() {
@@ -702,15 +830,21 @@ function updateSun() {
   const el = s ? s.el : -30;
   const day = THREE.MathUtils.smoothstep(el, -6, 8);          // 0 de noche, 1 de día
   const low = 1 - THREE.MathUtils.smoothstep(el, 2, 25);       // tono cálido cerca del horizonte
-  const bg = new THREE.Color(pal.bgNight).lerp(new THREE.Color(pal.bgDay), day);
+  // las nubes agrisan el cielo de día, tapan estrellas de noche, quitan luz directa y añaden difusa
+  const dayBg = new THREE.Color(pal.bgDay).lerp(new THREE.Color(pal.bgOvercast), cloud * .85);
+  const bg = new THREE.Color(pal.bgNight).lerp(dayBg, day);
   scene.background = bg; scene.fog.color.copy(bg);
-  hemi.intensity = (isDark ? .35 : .9) + day * (isDark ? .75 : .6);
-  stars.material.opacity = isDark ? (1 - day) * .85 : 0;
+  hemi.intensity = (isDark ? .35 : .9) + day * (isDark ? .75 : .6) + day * cloud * .3;
+  stars.material.opacity = isDark ? (1 - day) * .85 * (1 - cloud * .9) : 0;
+  // algo de luz propia para que la cara a la sombra no quede gris oscuro; más gris cuanto más cubierto
+  cloudMat.color.set(pal.cloud).lerp(new THREE.Color(pal.cloudDark), Math.max(cloud * cloud * .6, 1 - day) * .8);
+  cloudMat.emissive.copy(cloudMat.color).multiplyScalar(.35 * day + .08);
+  sunDisc.material.opacity = 1 - cloud * .7; halo.material.opacity = 1 - cloud * .85;
   if (s && el > -2) {
     const dir = sunDir(s.az, Math.max(el, .5));
     sunGroup.position.copy(dir).multiplyScalar(SUN_R); sunGroup.visible = el > -1.5;
     sunLight.position.copy(sunLight.target.position).add(dir.clone().multiplyScalar(70));
-    sunLight.intensity = (isDark ? 2.0 : 2.4) * day;
+    sunLight.intensity = (isDark ? 2.0 : 2.4) * day * (1 - cloud * .8);
     sunLight.color.set(0xfff1dc).lerp(new THREE.Color(0xffa860), low * .7);
     sunDisc.material.color.set(0xffe2a0).lerp(new THREE.Color(0xff9a50), low * .8);
     sunLight.castShadow = day > .05;
@@ -753,7 +887,13 @@ function setFlow(key, w, color, dir = 1) {
 function renderData() {
   const pv = num("pv"), load = num("load"), grid = num("grid");
   const exp = grid != null ? Math.max(0, -grid) : null, imp = grid != null ? Math.max(0, grid) : null;
-  setFlow("pv", pv, pal.sun, 1);
+  const dcv = num("dcv"), dca = num("dca"), acp = num("acp"), acv = num("acv");
+  const dcw = dcv != null && dca != null ? dcv * dca : pv;
+  setFlow("dc", dcw, pal.sun, 1);
+  setFlow("ac", acp ?? pv, pal.ac, 1);
+  const V = v => nf0.format(v) + " V";
+  $("inv-dc").textContent = dcv != null && dca != null ? `DC ${V(dcv)} · ${nf1.format(dca)} A` : "DC –";
+  $("inv-ac").textContent = acp != null ? `AC ${acv != null ? V(acv) + " · " : ""}${nf0.format(acp)} W` : "AC –";
   if (grid != null && grid < -5) setFlow("grid", exp, pal.out, 1);
   else if (grid != null && grid > 5) setFlow("grid", imp, pal.in, -1);
   else setFlow("grid", 0, pal.out, 1);
@@ -781,12 +921,13 @@ function renderData() {
     why.textContent = pv > 15 && pct > 0 ? `The panels cover ${pct}% of the home; the rest comes down the line from the tower.`
       : states[E.sun]?.s === "below_horizon" ? "Night time: the whole home runs on the grid." : "No production: the whole home runs on the grid.";
   } else { st.className = "card state even"; head.textContent = "Balanced"; why.textContent = "The panels are producing exactly what the home is using."; }
+  updateClouds();
   requestRender();
 }
 
 /* ===================== bucle ===================== */
 // 30 fps como mucho; con «reducir movimiento» no hay bucle: se dibuja solo cuando algo cambia.
-let last = 0, needRender = true, looping = false;
+let last = 0, needRender = true, looping = false, skyT = 0, skyAcc = 0;
 const FRAME = 1000 / 30;
 function requestRender() { needRender = true; if (!looping) requestAnimationFrame(drawOnce); }
 function drawOnce() { if (looping || !needRender) return; needRender = false; controls.update(); renderer.render(scene, camera); placeTags(); }
@@ -802,6 +943,12 @@ function loop(t) {
     f.speed += (f.target.speed - f.speed) * k;
     f.u.uPhase.value = (f.u.uPhase.value + f.speed * dt) % 1e4;
   }
+  // la nubosidad cambia despacio (constante de 40 s); el cielo y las sombras se rehacen cada 4 s si se ha movido
+  const c0 = cloud;
+  cloud += (cloudTarget - cloud) * (1 - Math.exp(-dt / 40));
+  skyAcc += Math.abs(cloud - c0); skyT += dt;
+  if (skyT > 4 && skyAcc > .005) { skyT = 0; skyAcc = 0; updateSun(); }
+  placeClouds(dt);
   controls.update(dt);
   renderer.render(scene, camera);
   placeTags();
@@ -814,6 +961,7 @@ function setMotion() {
   if (still) {
     looping = false;
     for (const f of Object.values(flows)) { f.u.uR.value = f.target.r; f.u.uOn.value = f.target.on; }
+    cloud = cloudTarget; placeClouds(); updateSun();
     requestRender();
   } else if (!looping) { looping = true; last = performance.now(); requestAnimationFrame(loop); }
 }
@@ -875,7 +1023,7 @@ showOrbit();
 setMotion();
 resize();
 connect();
-window.__solar3d = { THREE, scene, camera, controls, renderer, states, solarPosition, flows };
+window.__solar3d = { THREE, scene, camera, controls, renderer, states, solarPosition, flows, get gain() { return gain; }, get cloud() { return [cloud, cloudTarget]; } };
 </script>
 </body>
 </html>

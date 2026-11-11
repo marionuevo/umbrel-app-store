@@ -54,6 +54,15 @@ flujo corre por los cables: placas → inversor → contador y contador ↔ torr
 `www/vendor/three/` (licencia MIT), para no depender de un CDN. Dibuja como
 mucho a 30 fps; con «reducir movimiento» solo dibuja cuando cambia algo.
 
+Nubes (1.8.0): la producción se compara con la de cielo despejado en la posición
+del sol (irradiancia en el plano de las placas de Meinel más un 10 % de difusa,
+por una ganancia en W por W/m² que sale del percentil 95 de los últimos 10 días
+de estadísticas de 5 min, guardada un día en el navegador). Con poco sol o de
+noche se usa `cloud_coverage` de `weather.forecast_home` (met.no); otra entidad
+se elige con `window.HA_CONFIG.weather`. Las nubes se mueven con el viento de
+met.no. Cable de continua (placas → inversor) en ámbar y de alterna (inversor →
+contador) en acero.
+
 ## Desarrollo
 
 `~/AIWork/solar-panel/index.html` en el Mac es un enlace a `www/index.html`;

@@ -3,7 +3,7 @@ id: marionuevo-fv-panel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fv-panel/icon.svg
 category: automation
 name: Solar Live
-version: "1.7.0"
+version: "1.8.0"
 tagline: Live solar production and home consumption
 description: >
   Solar monitoring panel connected to the Home Assistant websocket: energy flows
@@ -26,7 +26,9 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  New 3D view (link "3D view" in the header): the house with its gable roof,
-  the 5 × 2 panels on the west slope, the sun at its real position with today's
-  path and shadows, and a grid tower, with the current flowing along the wires.
-  The 2D panel is unchanged.
+  3D view: the sky now shows the clouds. Production is compared with what the
+  panels make under a clear sky at the current sun position (calibrated from the
+  last 10 days), and the met.no cloud cover is used early, late and at night.
+  The DC wire (panels to inverter) and the AC wire (inverter to meter) have
+  different colours, with labels for the inverter and the meter. The door no
+  longer overlaps the plinth.
