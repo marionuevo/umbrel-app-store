@@ -325,7 +325,7 @@ async function calibrate() {
 // así que entre dos horas se interpola en línea recta y el cielo cambia minuto a minuto.
 let forecast = [];
 function onForecast(ev) {
-  forecast = (ev?.forecast || []).map(f => ({ t: Date.parse(f.datetime), cc: f.cloud_coverage }))
+  forecast = (ev?.forecast || []).map(f => ({ t: Date.parse(f.datetime), cc: f.cloud_coverage, pr: Number.isFinite(f.precipitation) ? f.precipitation : 0 }))
     .filter(f => Number.isFinite(f.t) && Number.isFinite(f.cc)).sort((a, b) => a.t - b.t);
   renderData();
 }
@@ -340,6 +340,26 @@ function forecastCloud(ms) {
   const cc = states[E.weather]?.a?.cloud_coverage;
   if (Number.isFinite(cc)) return { cc, fc: false };
   return f.length && ms < f[0].t ? { cc: f[0].cc, fc: true } : null;
+}
+// Lluvia: met.no da los mm de la hora que empieza en cada entrada; se toma como valor a la media
+// hora y se interpola entre horas. El estado actual de la entidad (rainy, pouring…) asegura que
+// llueva en la escena si está lloviendo ahora aunque la previsión de la hora diga casi nada.
+const RAINY = { rainy: .4, pouring: 5, "lightning-rainy": 2, snowy: 0, "snowy-rainy": .8, hail: 2 };
+function forecastRain(ms) {
+  const f = forecast; let mm = 0;
+  if (f.length) {
+    const c = ms - 18e5;   // centro de cada hora
+    if (c <= f[0].t) mm = f[0].pr;
+    else if (c >= f[f.length - 1].t) mm = f[f.length - 1].pr;
+    else {
+      let i = 0; while (i < f.length - 2 && f[i + 1].t < c) i++;
+      const a = f[i], b = f[i + 1], k = (c - a.t) / (b.t - a.t);
+      mm = a.pr + (b.pr - a.pr) * k;
+    }
+  }
+  const now = RAINY[states[E.weather]?.s];
+  if (now && Math.abs(timeShift) < 36e5) mm = Math.max(mm, now);
+  return mm;
 }
 function onEntities(ev) {
   for (const [id, v] of Object.entries(ev.a || {})) states[id] = { s: v.s, a: v.a || {} };
@@ -911,6 +931,53 @@ function placeClouds(dt = 0) {
   cloudMesh.instanceMatrix.needsUpdate = true;
 }
 placeClouds();
+// Lluvia: trazos que caen bajo las nubes, alrededor de la casa. Cada gota es un segmento con su
+// semilla; el shader la baja según el tiempo y la inclina con el viento, así que por fotograma solo
+// cambian uniformes. Cuántas se ven (drawRange) sigue a los mm/h.
+const RAIN_N = 7000, RAIN_H = 22, RAIN_R = 42;
+const rainU = { uT: { value: 0 }, uColor: { value: new THREE.Color() }, uAlpha: { value: 0 }, uDrift: { value: new THREE.Vector2() },
+  uLen: { value: .7 }, uFall: { value: 9 } };
+const rainMesh = (() => {
+  const seed = new Float32Array(RAIN_N * 2 * 4);
+  for (let i = 0; i < RAIN_N; i++) {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * RAIN_R, ph = Math.random(), sp = .8 + Math.random() * .4;
+    for (let v = 0; v < 2; v++) seed.set([CLOUD_C.x + Math.cos(a) * r, CLOUD_C.z + Math.sin(a) * r, ph, v ? -sp : sp], (i * 2 + v) * 4);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(RAIN_N * 2 * 3), 3));   // no se usa: lo pone el shader
+  g.setAttribute("aSeed", new THREE.BufferAttribute(seed, 4));
+  g.setDrawRange(0, 0);
+  const m = new THREE.LineSegments(g, new THREE.ShaderMaterial({ uniforms: rainU, transparent: true, depthWrite: false,
+    vertexShader: `attribute vec4 aSeed; uniform float uT, uLen, uFall; uniform vec2 uDrift; varying float vA;
+      void main() {
+        float sp = abs(aSeed.w), tip = aSeed.w < 0.0 ? 1.0 : 0.0;
+        float y = ${RAIN_H.toFixed(1)} * (1.0 - fract(aSeed.z + uT * uFall * sp / ${RAIN_H.toFixed(1)}));
+        float fallen = ${RAIN_H.toFixed(1)} - y;
+        vec3 p = vec3(aSeed.x + uDrift.x * fallen, y, aSeed.y + uDrift.y * fallen);
+        // la cola, hacia arriba y contra el viento
+        p += tip * uLen * sp * normalize(vec3(-uDrift.x, 1.0, -uDrift.y));
+        vA = smoothstep(0.0, 1.5, y) * smoothstep(${RAIN_H.toFixed(1)}, ${(RAIN_H - 3).toFixed(1)}, y) * (1.0 - 0.6 * tip);
+        gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+      }`,
+    fragmentShader: `uniform vec3 uColor; uniform float uAlpha; varying float vA;
+      void main() {
+        gl_FragColor = vec4(uColor, uAlpha * vA);
+        #include <colorspace_fragment>
+      }` }));
+  m.frustumCulled = false; m.renderOrder = 3; m.visible = false;
+  scene.add(m); return m;
+})();
+let rain = 0, rainTarget = 0, rainMM = 0;   // 0 seco … 1 aguacero
+function placeRain() {
+  const n = Math.round(RAIN_N * rain);
+  rainMesh.geometry.setDrawRange(0, n * 2); rainMesh.visible = n > 0;
+  rainU.uAlpha.value = (.35 + .3 * rain) * (.45 + .55 * lit);
+  rainU.uColor.value.set(0xaebdcc).lerp(tmpC.set(0x6f7f92), lit);
+  // con viento las gotas caen inclinadas (hasta ~25°)
+  const k = Math.min(.45, windSpeed * .25);
+  rainU.uDrift.value.set(wind.x * k, wind.z * k);
+}
+
 // La nubosidad de la escena sale de la previsión de HA (met.no), interpolada al minuto. Lo que
 // rinden las placas frente a cielo despejado se sigue enseñando como dato, y hace de respaldo si no
 // hay previsión.
@@ -924,18 +991,24 @@ function updateClouds() {
   else { cloudTarget = 0; cloudSrc = null; }
   if (Number.isFinite(w.wind_bearing)) { const b = (w.wind_bearing + 180) * RAD; wind.set(Math.sin(b), 0, -Math.cos(b)); }   // sopla hacia
   if (Number.isFinite(w.wind_speed)) windSpeed = .3 + Math.min(60, w.wind_speed) * .012;
-  const name = cloudTarget < .15 ? "Clear" : cloudTarget < .4 ? "Some clouds" : cloudTarget < .7 ? "Cloudy" : "Overcast";
+  rainMM = forecastRain(now);
+  // 0,1 mm/h = llovizna (~10 % de las gotas) … 8 mm/h o más = aguacero
+  rainTarget = rainMM < .05 ? 0 : THREE.MathUtils.clamp(Math.sqrt(rainMM / 8), .1, 1);
+  if (rainTarget) cloudTarget = Math.max(cloudTarget, .6);   // si llueve, el cielo está cubierto
+  const name = rainMM >= .05 ? (rainMM < .5 ? "Drizzle" : rainMM < 4 ? "Rain" : "Heavy rain")
+    : cloudTarget < .15 ? "Clear" : cloudTarget < .4 ? "Some clouds" : cloudTarget < .7 ? "Cloudy" : "Overcast";
+  const rainText = rainMM >= .05 ? ` · ${nf1.format(rainMM)} mm/h` : "";
   const sky = $("sky");
   const ktText = c => c.kt != null ? ` · output ${Math.round(c.kt * 100)}% of clear sky` : "";
   if (cloudSrc?.cc != null) {
-    sky.textContent = `${name} · ${nf0.format(cloudSrc.cc)}% cloud cover${ktText(cloudSrc)}`;
+    sky.textContent = `${name} · ${nf0.format(cloudSrc.cc)}% cloud cover${rainText}${ktText(cloudSrc)}`;
     sky.title = (cloudSrc.fc ? "Hourly forecast in Home Assistant (met.no), interpolated to the minute" : "Current conditions in Home Assistant (met.no)")
       + (cloudSrc.kt != null ? ` · the panels make ${Math.round(cloudSrc.kt * 100)}% of what they would under a clear sky (~${nf0.format(Math.round(cloudSrc.exp / 10) * 10)} W)` : "");
   } else if (cloudSrc?.kt != null) {
     sky.textContent = `${name} · ${Math.round(cloudSrc.kt * 100)}% of clear-sky output (~${nf0.format(Math.round(cloudSrc.exp / 10) * 10)} W)`;
     sky.title = "No forecast in Home Assistant: estimated from production against a clear sky at this sun position";
   } else { sky.textContent = "–"; sky.title = ""; }
-  if (!looping || (cloudSrc && !cloudSeen)) { cloudSeen = !!cloudSrc; cloud = cloudTarget; placeClouds(); updateSun(); }
+  if (!looping || (cloudSrc && !cloudSeen)) { cloudSeen = !!cloudSrc; cloud = cloudTarget; rain = rainTarget; placeClouds(); placeRain(); updateSun(); }
 }
 
 /* ---------- etiquetas ---------- */
@@ -1028,6 +1101,8 @@ function updateSun() {
   lit = THREE.MathUtils.smoothstep(el, -10, 10);               // paleta: 0 noche … 1 día
   for (const k in PAL.dark) pal[k].set(PAL.dark[k]).lerp(tmpC.set(PAL.light[k]), lit);
   for (const k of ["ground", "wall", "roof", "trim", "trafo", "door", "window", "steel", "cable", "box", "leaf", "trunk"]) M[k].color.copy(pal[k]);
+  // mojado: el suelo y el tejado oscurecen con la lluvia
+  M.ground.color.multiplyScalar(1 - .3 * rain); M.roof.color.multiplyScalar(1 - .2 * rain);
   M.frame.color.set(0xaab2bd).lerp(tmpC.set(0xc9ced6), lit);
   M.panel.color.set(0xffffff); M.panel.emissive.copy(pal.sun);
   M.ring.color.copy(pal.ring); M.arc.color.copy(pal.arc); M.hourDot.color.copy(pal.arc);
@@ -1040,6 +1115,7 @@ function updateSun() {
   const oc = cloud * .85;
   zen.lerp(tmpC.set(0x141c28).lerp(tmpC2.set(0x9aa3ad), day), oc);
   hor.lerp(tmpC.set(0x1b2432).lerp(tmpC2.set(0xc8ccd0), day), oc);
+  zen.multiplyScalar(1 - .3 * rain); hor.multiplyScalar(1 - .25 * rain);
   skyU.uGlowK.value = (.3 + .6 * low) * THREE.MathUtils.smoothstep(el, -12, -3) * (1 - cloud * .8);
   scene.background = hor; scene.fog.color.copy(hor);
   hemi.color.copy(pal.hemiSky).lerp(zen, .2); hemi.groundColor.copy(pal.hemiGround);
@@ -1048,14 +1124,14 @@ function updateSun() {
   hemi.intensity = (.35 + .55 * lit) + day * (.75 - .15 * lit) + day * cloud * .3 + twilight * .9;
   stars.material.opacity = (1 - THREE.MathUtils.smoothstep(el, -14, -5)) * .85 * (1 - cloud * .9);
   // algo de luz propia para que la cara a la sombra no quede gris oscuro; más gris cuanto más cubierto
-  cloudMat.color.copy(pal.cloud).lerp(pal.cloudDark, Math.max(cloud * cloud * .6, 1 - day) * .8);
+  cloudMat.color.copy(pal.cloud).lerp(pal.cloudDark, Math.max(cloud * cloud * .6, 1 - day, rain * 1.1) * .8);
   cloudMat.emissive.copy(cloudMat.color).multiplyScalar(.35 * day + .08);
   sunDisc.material.opacity = 1 - cloud * .7; halo.material.opacity = 1 - cloud * .85;
   if (s && el > -2) {
     const dir = sunDir(s.az, Math.max(el, .5));
     sunGroup.position.copy(dir).multiplyScalar(SUN_R); sunGroup.visible = el > -1.5;
     sunLight.position.copy(sunLight.target.position).add(dir.clone().multiplyScalar(70));
-    sunLight.intensity = (2.0 + .4 * lit) * day * (1 - cloud * .8);
+    sunLight.intensity = (2.0 + .4 * lit) * day * (1 - cloud * .8) * (1 - rain * .7);
     sunLight.color.set(0xfff1dc).lerp(tmpC.set(0xffa860), low * .7);
     sunDisc.material.color.set(0xffe2a0).lerp(tmpC.set(0xff9a50), low * .8);
     sunLight.castShadow = day > .05;
@@ -1072,7 +1148,7 @@ function updateSun() {
     $("sun-inc").textContent = s.el > 0 ? Math.round(cos * 100) + "%" : "–";
     $("sun-inc").title = s.el > 0 ? "Angle of incidence " + nf0.format(Math.acos(cos) / RAD) + "°" : "";
     const lit = s.el > 0 && cos > 0;
-    const on = lit ? THREE.MathUtils.smoothstep(cos, 0, .15) * (1 - cloud * .75) : 0;
+    const on = lit ? THREE.MathUtils.smoothstep(cos, 0, .15) * (1 - cloud * .75) * (1 - rain * .8) : 0;
     const dir = sunDir(s.az, Math.max(s.el, .5));
     placeBeams(dir, on);
     const bt = tags.find(t => t.el.id === "tag-beam");
@@ -1166,6 +1242,11 @@ function loop(t) {
     f.u.uPhase.value = (f.u.uPhase.value + f.speed * dt) % 1e4;
   }
   beamU.uT.value = (beamU.uT.value + dt) % 1e4;
+  rainU.uT.value = (rainU.uT.value + dt) % 1e4;
+  // la lluvia entra y sale en unos 20 s
+  const r0 = rain;
+  rain += (rainTarget - rain) * (1 - Math.exp(-dt / 20));
+  if (rain || r0) { if (Math.abs(rain - rainTarget) < .002) rain = rainTarget; placeRain(); skyAcc += Math.abs(rain - r0); }
   // la nubosidad cambia despacio (constante de 40 s); el cielo y las sombras se rehacen cada 4 s si se ha movido
   const c0 = cloud;
   cloud += (cloudTarget - cloud) * (1 - Math.exp(-dt / 40));
@@ -1187,7 +1268,7 @@ function setMotion() {
   if (still) {
     looping = false;
     for (const f of Object.values(flows)) { f.u.uR.value = f.target.r; f.u.uOn.value = f.target.on; }
-    cloud = cloudTarget; placeClouds(); updateSun();
+    cloud = cloudTarget; rain = rainTarget; placeClouds(); placeRain(); updateSun();
     requestRender();
   } else if (!looping) { looping = true; last = performance.now(); requestAnimationFrame(loop); }
 }
@@ -1240,7 +1321,8 @@ resize();
 connect();
 window.__solar3d = { THREE, scene, camera, controls, renderer, states, solarPosition, flows, get gain() { return gain; }, get cloud() { return [cloud, cloudTarget]; },
   get forecast() { return forecast; }, get timeShift() { return timeShift; },
-  set timeShift(v) { timeShift = v; updateClouds(); cloud = cloudTarget; placeClouds(); updateSun(); } };
+  set timeShift(v) { timeShift = v; updateClouds(); cloud = cloudTarget; rain = rainTarget; placeClouds(); placeRain(); updateSun(); },
+  get rain() { return [rain, rainTarget, rainMM]; } };
 </script>
 </body>
 </html>
