@@ -10,7 +10,8 @@
 <style>
 /* Vista 3D de Solar Live: la escena ocupa toda la pantalla y encima van la cabecera, las
    etiquetas de cada nodo (HTML proyectado, no texto en WebGL) y dos tarjetas. Misma paleta
-   que index.html: noche, cal, acero, salvia y ámbar solar. */
+   que index.html: noche, cal, acero, salvia y ámbar solar. No hay botón de tema: el JS pone
+   data-theme según la luz del cielo (claro de día, oscuro de noche y en el crepúsculo). */
 :root {
   --bg: #0e1a2b; --panel: rgba(18, 33, 58, .78); --fg: #f7f0e4; --muted: #8f9cad; --line: #22344d;
   --sun: #f0a93b; --home: #f7f0e4; --grid-out: #88a592; --grid-in: #e0785e; --ac: #7fa7d6;
@@ -46,7 +47,8 @@ body {
   padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   display: flex; flex-direction: column; justify-content: space-between; gap: 16px; }
 .hud > * { pointer-events: auto; }
-.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px; }
+.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px;
+  text-shadow: 0 0 6px var(--bg), 0 0 14px var(--bg); }   /* legible sobre cualquier color del cielo */
 .top h1 { font-weight: 400; font-size: 1.6rem; margin: 0; letter-spacing: .01em; }
 .top h1 small { font-family: var(--font-num); font-size: .72rem; letter-spacing: .09em; color: var(--sun); margin-left: 8px; vertical-align: 3px; }
 .top .meta { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--muted); font-size: .85rem; margin-left: auto; align-items: center; }
@@ -61,6 +63,8 @@ body {
 .link:hover, .link:focus-visible { color: var(--fg); }
 
 .cards { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; }
+/* el tema cambia solo con el cielo: fundido lento en vez de salto */
+body, .top, .card, .tag .w, .tag.small .k, .tag.sunpin, .link, .label, .tag .k { transition: color 2s, background-color 2s, border-color 2s, text-shadow 2s; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px;
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 .state { max-width: 460px; border-left: 4px solid var(--muted); }
@@ -125,7 +129,6 @@ dialog input { font: inherit; color: var(--fg); background: transparent; border:
       <span class="num" id="clock">--:--</span>
       <a class="link" href="index.html">2D view</a>
       <button class="link" id="orbit" type="button">Auto-rotate: on</button>
-      <button class="link" id="theme" type="button">Dark</button>
       <button class="link" id="open-config" type="button">Connection</button>
     </div>
   </header>
@@ -200,6 +203,9 @@ const hm = d => d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digi
 const states = {};
 const num = k => { const v = parseFloat(states[E[k]]?.s); return Number.isFinite(v) ? v : null; };
 let LAT = null, LON = null;   // de get_config; sin ellos se usa el acimut y la elevación de sun.sun
+// Desplazamiento del reloj del cielo, solo para pruebas (window.__solar3d.timeShift = ms).
+let timeShift = 0;
+const skyNow = () => Date.now() + timeShift;
 
 // Configuración y conexión: lo mismo que index.html (token de config.local.js, sesión de HA o el
 // guardado en este navegador).
@@ -238,7 +244,7 @@ $("config-form").addEventListener("submit", ev => {
   connect();
 });
 
-let ws, msgId = 0, pending = {}, retry = 1000, subId = null, cfgNow = null;
+let ws, msgId = 0, pending = {}, retry = 1000, subId = null, fcId = null, cfgNow = null;
 function setLive(kind, text) { $("live").className = "live " + kind; $("live-text").textContent = text; }
 function call(msg) { return new Promise((res, rej) => { const id = ++msgId; pending[id] = { res, rej }; ws.send(JSON.stringify({ id, ...msg })); }); }
 function connect() {
@@ -259,6 +265,7 @@ function connect() {
     } else if (m.type === "auth_ok") { retry = 1000; cfg.retried = false; setLive("on", "Live"); start(); }
     else if (m.type === "result" && pending[m.id]) { const p = pending[m.id]; delete pending[m.id]; m.success ? p.res(m.result) : p.rej(m.error); }
     else if (m.type === "event" && m.id === subId) onEntities(m.event);
+    else if (m.type === "event" && m.id === fcId) onForecast(m.event);
   };
   ws.onclose = () => {
     if (!retry) return;
@@ -269,6 +276,9 @@ function connect() {
 async function start() {
   subId = msgId + 1;
   call({ type: "subscribe_entities", entity_ids: Object.values(E) }).catch(() => {});
+  // previsión horaria de met.no: HA la manda al suscribirse y cada vez que la renueva (~1 h)
+  fcId = msgId + 1;
+  call({ type: "weather/subscribe_forecast", entity_id: E.weather, forecast_type: "hourly" }).catch(() => { fcId = null; });
   try {
     const c = await call({ type: "get_config" });
     if (Number.isFinite(c?.latitude) && Number.isFinite(c?.longitude)) { LAT = c.latitude; LON = c.longitude; buildSunPath(); updateSun(); renderData(); }
@@ -311,6 +321,26 @@ async function calibrate() {
     renderData();
   } catch (e) {}
 }
+// Previsión horaria: cada entrada es el valor en ese instante (met.no da la nubosidad instantánea),
+// así que entre dos horas se interpola en línea recta y el cielo cambia minuto a minuto.
+let forecast = [];
+function onForecast(ev) {
+  forecast = (ev?.forecast || []).map(f => ({ t: Date.parse(f.datetime), cc: f.cloud_coverage }))
+    .filter(f => Number.isFinite(f.t) && Number.isFinite(f.cc)).sort((a, b) => a.t - b.t);
+  renderData();
+}
+function forecastCloud(ms) {
+  const f = forecast;
+  if (f.length && ms >= f[0].t && ms <= f[f.length - 1].t) {
+    let i = 0; while (i < f.length - 2 && f[i + 1].t < ms) i++;
+    const a = f[i], b = f[i + 1] || a, k = b.t > a.t ? (ms - a.t) / (b.t - a.t) : 0;
+    return { cc: a.cc + (b.cc - a.cc) * k, fc: true };
+  }
+  // antes de la primera hora de la previsión (o sin ella): el «ahora» de met.no
+  const cc = states[E.weather]?.a?.cloud_coverage;
+  if (Number.isFinite(cc)) return { cc, fc: false };
+  return f.length && ms < f[0].t ? { cc: f[0].cc, fc: true } : null;
+}
 function onEntities(ev) {
   for (const [id, v] of Object.entries(ev.a || {})) states[id] = { s: v.s, a: v.a || {} };
   for (const [id, v] of Object.entries(ev.c || {})) {
@@ -343,7 +373,7 @@ function solarPosition(ms, lat, lon) {
   return { az: (az / RAD + 360) % 360, el: el / RAD };
 }
 function sunNow() {
-  if (LAT != null) return solarPosition(Date.now(), LAT, LON);
+  if (LAT != null) return solarPosition(skyNow(), LAT, LON);
   const a = states[E.sun]?.a;
   return a && Number.isFinite(a.azimuth) && Number.isFinite(a.elevation) ? { az: a.azimuth, el: a.elevation } : null;
 }
@@ -383,7 +413,7 @@ sunLight.shadow.bias = -0.0004; sunLight.shadow.normalBias = 0.03;
 sunLight.target.position.set(5, 0, 4);
 scene.add(sunLight, sunLight.target);
 
-// materiales; los colores los pone applyPalette según el tema
+// materiales; los colores los pone updateSun según la luz del cielo
 const M = {
   ground: new THREE.MeshLambertMaterial(),
   wall: new THREE.MeshLambertMaterial(),
@@ -826,6 +856,26 @@ const stars = (() => {
   sky.add(p); return p;
 })();
 
+// Cúpula del cielo: degradado de horizonte a cénit más el resplandor alrededor del sol (ancho y
+// cálido cerca del horizonte). Los colores salen de la elevación del sol en updateSun.
+const skyU = { uZen: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uGlow: { value: new THREE.Color() },
+  uSun: { value: new THREE.Vector3(0, 1, 0) }, uGlowK: { value: 0 } };
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(1000, 48, 24), new THREE.ShaderMaterial({
+  uniforms: skyU, side: THREE.BackSide, depthWrite: false,
+  vertexShader: `varying vec3 vD; void main() { vD = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform vec3 uZen, uHor, uGlow, uSun; uniform float uGlowK; varying vec3 vD;
+    void main() {
+      vec3 d = normalize(vD); float h = max(d.y, 0.0);
+      vec3 c = mix(uHor, uZen, pow(h, 0.6));
+      float s = max(dot(d, uSun), 0.0);
+      float side = max(dot(normalize(d.xz + 1e-5), normalize(uSun.xz + 1e-5)), 0.0);
+      float g = 0.55 * pow(s, 8.0) + 0.45 * pow(s, 90.0) + 0.7 * side * side * exp(-h * 7.0);
+      gl_FragColor = vec4(mix(c, uGlow, clamp(g * uGlowK, 0.0, 1.0)), 1.0);
+      #include <colorspace_fragment>
+    }` }));
+skyDome.renderOrder = -1; skyDome.frustumCulled = false;
+sky.add(skyDome);
+
 // Nubes: un solo InstancedMesh de bolas aplastadas (una llamada de dibujo). Se ven tantas como
 // diga la nubosidad y se mueven con el viento de met.no.
 const CLOUDS = 16, PUFFS = 6;
@@ -861,24 +911,30 @@ function placeClouds(dt = 0) {
   cloudMesh.instanceMatrix.needsUpdate = true;
 }
 placeClouds();
+// La nubosidad de la escena sale de la previsión de HA (met.no), interpolada al minuto. Lo que
+// rinden las placas frente a cielo despejado se sigue enseñando como dato, y hace de respaldo si no
+// hay previsión.
 function updateClouds() {
-  const pv = num("pv"), w = states[E.weather]?.a || {};
-  const exp = gain ? Math.min(INVERTER_W, gain * clearSkyPOA(Date.now())) : 0;
-  if (gain && exp > 250 && pv != null) {
-    const kt = pv >= INVERTER_W * .95 ? 1 : pv / exp;
-    cloudTarget = THREE.MathUtils.clamp((.95 - kt) / .8, 0, 1);
-    cloudSrc = { kt: Math.min(1, kt), exp };
-  } else if (Number.isFinite(w.cloud_coverage)) { cloudTarget = w.cloud_coverage / 100; cloudSrc = { cc: w.cloud_coverage }; }
+  const pv = num("pv"), w = states[E.weather]?.a || {}, now = skyNow();
+  const exp = gain ? Math.min(INVERTER_W, gain * clearSkyPOA(now)) : 0;
+  const kt = gain && exp > 250 && pv != null ? (pv >= INVERTER_W * .95 ? 1 : Math.min(1, pv / exp)) : null;
+  const fc = forecastCloud(now);
+  if (fc) { cloudTarget = THREE.MathUtils.clamp(fc.cc / 100, 0, 1); cloudSrc = { cc: fc.cc, fc: fc.fc, kt, exp }; }
+  else if (kt != null) { cloudTarget = THREE.MathUtils.clamp((.95 - kt) / .8, 0, 1); cloudSrc = { kt, exp }; }
   else { cloudTarget = 0; cloudSrc = null; }
   if (Number.isFinite(w.wind_bearing)) { const b = (w.wind_bearing + 180) * RAD; wind.set(Math.sin(b), 0, -Math.cos(b)); }   // sopla hacia
   if (Number.isFinite(w.wind_speed)) windSpeed = .3 + Math.min(60, w.wind_speed) * .012;
   const name = cloudTarget < .15 ? "Clear" : cloudTarget < .4 ? "Some clouds" : cloudTarget < .7 ? "Cloudy" : "Overcast";
   const sky = $("sky");
-  if (cloudSrc?.kt != null) {
+  const ktText = c => c.kt != null ? ` · output ${Math.round(c.kt * 100)}% of clear sky` : "";
+  if (cloudSrc?.cc != null) {
+    sky.textContent = `${name} · ${nf0.format(cloudSrc.cc)}% cloud cover${ktText(cloudSrc)}`;
+    sky.title = (cloudSrc.fc ? "Hourly forecast in Home Assistant (met.no), interpolated to the minute" : "Current conditions in Home Assistant (met.no)")
+      + (cloudSrc.kt != null ? ` · the panels make ${Math.round(cloudSrc.kt * 100)}% of what they would under a clear sky (~${nf0.format(Math.round(cloudSrc.exp / 10) * 10)} W)` : "");
+  } else if (cloudSrc?.kt != null) {
     sky.textContent = `${name} · ${Math.round(cloudSrc.kt * 100)}% of clear-sky output (~${nf0.format(Math.round(cloudSrc.exp / 10) * 10)} W)`;
-    sky.title = "Production compared with what these panels make under a clear sky at this sun position" + (Number.isFinite(w.cloud_coverage) ? ` · met.no: ${nf0.format(w.cloud_coverage)}% cloud cover` : "");
-  } else if (cloudSrc?.cc != null) { sky.textContent = `${name} · ${nf0.format(cloudSrc.cc)}% cloud cover (met.no)`; sky.title = ""; }
-  else { sky.textContent = "–"; sky.title = ""; }
+    sky.title = "No forecast in Home Assistant: estimated from production against a clear sky at this sun position";
+  } else { sky.textContent = "–"; sky.title = ""; }
   if (!looping || (cloudSrc && !cloudSeen)) { cloudSeen = !!cloudSrc; cloud = cloudTarget; placeClouds(); updateSun(); }
 }
 
@@ -933,51 +989,81 @@ function placeTags() {
 
 /* ===================== paleta y sol ===================== */
 const PAL = {
-  dark: { bgNight: 0x0e1a2b, bgDay: 0x2a4a75, ground: 0x1d3149, wall: 0xe8e0d2, roof: 0x4a5566, trim: 0xb9b2a6, door: 0x2a3a52,
+  dark: { ground: 0x1d3149, wall: 0xe8e0d2, roof: 0x4a5566, trim: 0xb9b2a6, door: 0x2a3a52,
     window: 0x8fa3bb, steel: 0x7c8a9c, trafo: 0x9aa6b4, cable: 0x283548, box: 0xd8d2c6, leaf: 0x5f7d6a, trunk: 0x6b5848, ring: 0x3a4d68, arc: 0xf0a93b,
     sun: 0xf0a93b, ac: 0x7fa7d6, home: 0xf7f0e4, out: 0x88a592, in: 0xe0785e, hemiSky: 0x9fb3cc, hemiGround: 0x1a2738,
-    bgOvercast: 0x3d4859, cloud: 0xd3dae3, cloudDark: 0x6f7a88 },
-  light: { bgNight: 0xd7d9dc, bgDay: 0xf7f0e4, ground: 0xebe2d1, wall: 0xfffaf1, roof: 0x5d6877, trim: 0xd9d0bf, door: 0x406896,
+    cloud: 0xd3dae3, cloudDark: 0x6f7a88 },
+  light: { ground: 0xebe2d1, wall: 0xfffaf1, roof: 0x5d6877, trim: 0xd9d0bf, door: 0x406896,
     window: 0x9fb2c8, steel: 0x6e7b8c, trafo: 0xaab4bf, cable: 0x2f3b4c, box: 0xf2ece1, leaf: 0x88a592, trunk: 0x8a7462, ring: 0xc9bea9, arc: 0xc07b10,
     sun: 0xc07b10, ac: 0x406896, home: 0x0e1a2b, out: 0x4f6958, in: 0xb24a33, hemiSky: 0xffffff, hemiGround: 0xcbbfa8,
-    bgOvercast: 0xdcdad6, cloud: 0xffffff, cloudDark: 0xa9b0b9 },
+    cloud: 0xffffff, cloudDark: 0xa9b0b9 },
 };
-let pal = PAL.dark, isDark = true;
-function applyPalette() {
-  pal = isDark ? PAL.dark : PAL.light;
-  for (const k of ["ground", "wall", "roof", "trim", "trafo", "door", "window", "steel", "cable", "box", "leaf", "trunk"]) M[k].color.set(pal[k]);
-  M.frame.color.set(isDark ? 0xaab2bd : 0xc9ced6);
-  M.panel.color.set(0xffffff);
-  M.ring.color.set(pal.ring); M.arc.color.set(pal.arc); M.hourDot.color.set(pal.arc);
-  beamU.uColor.value.set(isDark ? 0xffcf70 : 0xd08d12); hitMat.color.set(isDark ? 0xffd88a : 0xe0a030);
-  hemi.color.set(pal.hemiSky); hemi.groundColor.set(pal.hemiGround);
-  updateSun(); renderData();
+// Sin tema claro/oscuro: la escena va de la paleta de noche a la de día según la elevación del sol
+// (lit), y el cielo sigue la tabla SKY (cénit, horizonte y resplandor del lado del sol).
+const pal = {};
+for (const k in PAL.dark) pal[k] = new THREE.Color();
+const tmpC = new THREE.Color(), tmpC2 = new THREE.Color();
+const SKY = [   // elevación del sol, cénit, horizonte, resplandor
+  [-18, 0x070f1d, 0x0e1a2b, 0x0e1a2b],
+  [-11, 0x0a1527, 0x18263f, 0x26304e],
+  [-6, 0x142544, 0x34405f, 0x7a5262],
+  [-2, 0x22406d, 0x7c6f80, 0xd9784e],
+  [2, 0x34598f, 0xd29a78, 0xf39353],
+  [7, 0x4a74ab, 0xe3c3a0, 0xf6b469],
+  [14, 0x5a88c0, 0xcfdbe5, 0xf6d9a4],
+  [35, 0x5e90cc, 0xd9e5ee, 0xfbf0d9],
+  [90, 0x5689c8, 0xdfe9f1, 0xfdf6e8],
+];
+function skyAt(el, out) {
+  let i = 0; while (i < SKY.length - 2 && el > SKY[i + 1][0]) i++;
+  const a = SKY[i], b = SKY[i + 1], k = THREE.MathUtils.clamp((el - a[0]) / (b[0] - a[0]), 0, 1);
+  for (let j = 0; j < 3; j++) out[j].set(a[j + 1]).lerp(tmpC.set(b[j + 1]), k);
 }
-let sunInfo = null;
+let sunInfo = null, lit = 0, hudTheme = null;
 function updateSun() {
   const s = sunNow(); sunInfo = s;
   const el = s ? s.el : -30;
   const day = THREE.MathUtils.smoothstep(el, -6, 8);          // 0 de noche, 1 de día
   const low = 1 - THREE.MathUtils.smoothstep(el, 2, 25);       // tono cálido cerca del horizonte
-  // las nubes agrisan el cielo de día, tapan estrellas de noche, quitan luz directa y añaden difusa
-  const dayBg = new THREE.Color(pal.bgDay).lerp(new THREE.Color(pal.bgOvercast), cloud * .85);
-  const bg = new THREE.Color(pal.bgNight).lerp(dayBg, day);
-  scene.background = bg; scene.fog.color.copy(bg);
-  hemi.intensity = (isDark ? .35 : .9) + day * (isDark ? .75 : .6) + day * cloud * .3;
-  stars.material.opacity = isDark ? (1 - day) * .85 * (1 - cloud * .9) : 0;
+  lit = THREE.MathUtils.smoothstep(el, -10, 10);               // paleta: 0 noche … 1 día
+  for (const k in PAL.dark) pal[k].set(PAL.dark[k]).lerp(tmpC.set(PAL.light[k]), lit);
+  for (const k of ["ground", "wall", "roof", "trim", "trafo", "door", "window", "steel", "cable", "box", "leaf", "trunk"]) M[k].color.copy(pal[k]);
+  M.frame.color.set(0xaab2bd).lerp(tmpC.set(0xc9ced6), lit);
+  M.panel.color.set(0xffffff); M.panel.emissive.copy(pal.sun);
+  M.ring.color.copy(pal.ring); M.arc.color.copy(pal.arc); M.hourDot.color.copy(pal.arc);
+  beamU.uColor.value.set(0xffcf70).lerp(tmpC.set(0xd08d12), lit); hitMat.color.set(0xffd88a).lerp(tmpC.set(0xe0a030), lit);
+  for (const f of Object.values(flows)) { if (f.colorKey) f.u.uColor.value.copy(pal[f.colorKey]); f.u.uBase.value = .22 + .08 * lit; }
+
+  // cielo: cénit y horizonte de la tabla; las nubes lo agrisan (gris de noche … gris de día)
+  const [zen, hor, glow] = [skyU.uZen.value, skyU.uHor.value, skyU.uGlow.value];
+  skyAt(el, [zen, hor, glow]);
+  const oc = cloud * .85;
+  zen.lerp(tmpC.set(0x141c28).lerp(tmpC2.set(0x9aa3ad), day), oc);
+  hor.lerp(tmpC.set(0x1b2432).lerp(tmpC2.set(0xc8ccd0), day), oc);
+  skyU.uGlowK.value = (.3 + .6 * low) * THREE.MathUtils.smoothstep(el, -12, -3) * (1 - cloud * .8);
+  scene.background = hor; scene.fog.color.copy(hor);
+  hemi.color.copy(pal.hemiSky).lerp(zen, .2); hemi.groundColor.copy(pal.hemiGround);
+  // en el crepúsculo el cielo aún alumbra el suelo aunque el sol ya no llegue
+  const twilight = THREE.MathUtils.smoothstep(el, -12, 0) * (1 - day);
+  hemi.intensity = (.35 + .55 * lit) + day * (.75 - .15 * lit) + day * cloud * .3 + twilight * .9;
+  stars.material.opacity = (1 - THREE.MathUtils.smoothstep(el, -14, -5)) * .85 * (1 - cloud * .9);
   // algo de luz propia para que la cara a la sombra no quede gris oscuro; más gris cuanto más cubierto
-  cloudMat.color.set(pal.cloud).lerp(new THREE.Color(pal.cloudDark), Math.max(cloud * cloud * .6, 1 - day) * .8);
+  cloudMat.color.copy(pal.cloud).lerp(pal.cloudDark, Math.max(cloud * cloud * .6, 1 - day) * .8);
   cloudMat.emissive.copy(cloudMat.color).multiplyScalar(.35 * day + .08);
   sunDisc.material.opacity = 1 - cloud * .7; halo.material.opacity = 1 - cloud * .85;
   if (s && el > -2) {
     const dir = sunDir(s.az, Math.max(el, .5));
     sunGroup.position.copy(dir).multiplyScalar(SUN_R); sunGroup.visible = el > -1.5;
     sunLight.position.copy(sunLight.target.position).add(dir.clone().multiplyScalar(70));
-    sunLight.intensity = (isDark ? 2.0 : 2.4) * day * (1 - cloud * .8);
-    sunLight.color.set(0xfff1dc).lerp(new THREE.Color(0xffa860), low * .7);
-    sunDisc.material.color.set(0xffe2a0).lerp(new THREE.Color(0xff9a50), low * .8);
+    sunLight.intensity = (2.0 + .4 * lit) * day * (1 - cloud * .8);
+    sunLight.color.set(0xfff1dc).lerp(tmpC.set(0xffa860), low * .7);
+    sunDisc.material.color.set(0xffe2a0).lerp(tmpC.set(0xff9a50), low * .8);
     sunLight.castShadow = day > .05;
   } else { sunGroup.visible = false; sunLight.intensity = 0; sunLight.castShadow = false; }
+  if (s) skyU.uSun.value.copy(sunDir(s.az, s.el));
+  // la cabecera y las tarjetas, claras con luz de día; con margen para no parpadear en el cambio
+  const want = lit > .55 ? "light" : lit < .45 ? "dark" : hudTheme || (lit >= .5 ? "light" : "dark");
+  if (want !== hudTheme) { hudTheme = want; document.documentElement.dataset.theme = want; }
   // ángulo de incidencia en las placas
   if (s) {
     const cos = Math.max(0, sunDir(s.az, s.el).dot(PANEL_NORMAL)) * (s.el > 0 ? 1 : 0);
@@ -1006,27 +1092,27 @@ function updateSun() {
 const compassName = az => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(az / 45) % 8];
 
 /* ===================== datos → escena ===================== */
-function setFlow(key, w, color, dir = 1, thin = false) {
+function setFlow(key, w, colorKey, dir = 1, thin = false) {
   const f = flows[key], on = w != null && w > 5, x = on ? Math.min(1, w / INVERTER_W) : 0;
   f.target.on = on ? 1 : 0;
   // en alta la misma potencia lleva unas 85 veces menos corriente: cable de flujo fino
   f.target.r = thin ? .035 + .03 * Math.sqrt(x) : .045 + .13 * Math.sqrt(x);
   f.target.speed = on ? dir * (1.2 + 5 * x) : 0;
-  f.u.uColor.value.set(color);
-  f.u.uBase.value = isDark ? .22 : .3;
+  f.colorKey = colorKey; f.u.uColor.value.copy(pal[colorKey]);
+  f.u.uBase.value = .22 + .08 * lit;
 }
 function renderData() {
   const pv = num("pv"), load = num("load"), grid = num("grid");
   const exp = grid != null ? Math.max(0, -grid) : null, imp = grid != null ? Math.max(0, grid) : null;
   const dcv = num("dcv"), dca = num("dca"), acp = num("acp"), acv = num("acv");
   const dcw = dcv != null && dca != null ? dcv * dca : pv;
-  setFlow("dc", dcw, pal.sun, 1);
-  setFlow("ac", acp ?? pv, pal.ac, 1);
+  setFlow("dc", dcw, "sun", 1);
+  setFlow("ac", acp ?? pv, "ac", 1);
   const V = v => nf0.format(v) + " V";
   $("inv-dc").textContent = dcv != null && dca != null ? `DC ${V(dcv)} · ${nf1.format(dca)} A` : "DC –";
   $("inv-ac").textContent = acp != null ? `AC ${acv != null ? V(acv) + " · " : ""}${nf0.format(acp)} W` : "AC –";
   const gw = grid == null ? null : Math.abs(grid) > 5 ? Math.abs(grid) : 0;
-  const gc = grid != null && grid > 5 ? pal.in : pal.out, gd = grid != null && grid > 5 ? -1 : 1;
+  const gc = grid != null && grid > 5 ? "in" : "out", gd = grid != null && grid > 5 ? -1 : 1;
   setFlow("grid", gw, gc, gd);
   setFlow("hv", gw, gc, gd, true);        // el camino de alta sale del transformador: mismo sentido que la acometida
   const lvV = acv || 230;
@@ -1034,7 +1120,7 @@ function renderData() {
   $("tr-lv").textContent = gw != null ? `LV ${V(lvV)} · ${nf1.format(gw / lvV)} A` : "LV –";
   // placas que brillan un poco con la producción, ventanas con el consumo, LED del inversor
   const xp = pv ? Math.min(1, pv / INVERTER_W) : 0;
-  M.panel.emissive.set(pal.sun); M.panel.emissiveIntensity = .12 * xp;
+  M.panel.emissive.copy(pal.sun); M.panel.emissiveIntensity = .12 * xp;
   const xl = load ? Math.min(1, load / 3000) : 0;
   M.window.emissiveIntensity = (sunInfo && sunInfo.el > 3 ? .15 : .55) + .9 * xl;
   M.led.color.set(pv > 5 ? pal.out : 0x3a4556);
@@ -1140,33 +1226,21 @@ function resize() {
 }
 new ResizeObserver(resize).observe(host);
 
-/* tema: compartido con la vista 2D (misma clave) */
-function applyTheme(t) {
-  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
-  isDark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  $("theme").textContent = isDark ? "Light" : "Dark";
-  applyPalette();
-}
-$("theme").onclick = () => {
-  const t = $("theme").textContent === "Dark" ? "dark" : "light";
-  try { localStorage.setItem("fv-panel-tema", t); } catch (e) {}
-  applyTheme(t);
-};
-let savedTheme = null; try { savedTheme = localStorage.getItem("fv-panel-tema"); } catch (e) {}
-matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (!document.documentElement.dataset.theme) applyTheme(null); });
-
 $("clock").textContent = hm(new Date());
 setInterval(() => { $("clock").textContent = hm(new Date()); }, 1000);
-setInterval(updateSun, 60000);
+// cada minuto: el sol avanza y la nubosidad se mueve por la previsión interpolada
+setInterval(() => { updateClouds(); updateSun(); }, 60000);
 // a medianoche, el arco del día nuevo
 setInterval(() => { const d = new Date(); if (d.getHours() === 0 && d.getMinutes() === 0) buildSunPath(); }, 60000);
 
-applyTheme(savedTheme);
+updateSun();
 showOrbit();
 setMotion();
 resize();
 connect();
-window.__solar3d = { THREE, scene, camera, controls, renderer, states, solarPosition, flows, get gain() { return gain; }, get cloud() { return [cloud, cloudTarget]; } };
+window.__solar3d = { THREE, scene, camera, controls, renderer, states, solarPosition, flows, get gain() { return gain; }, get cloud() { return [cloud, cloudTarget]; },
+  get forecast() { return forecast; }, get timeShift() { return timeShift; },
+  set timeShift(v) { timeShift = v; updateClouds(); cloud = cloudTarget; placeClouds(); updateSun(); } };
 </script>
 </body>
 </html>

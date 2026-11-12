@@ -3,7 +3,7 @@ id: marionuevo-fv-panel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fv-panel/icon.svg
 category: automation
 name: Solar Live
-version: "1.9.2"
+version: "1.10.0"
 tagline: Live solar production and home consumption
 description: >
   Solar monitoring panel connected to the Home Assistant websocket: energy flows
@@ -26,7 +26,8 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  3D view: the dashed line from the panels to the sun is now a beam of sunlight
-  hitting the panels, brighter the more directly the sun shines on them and
-  dimmer with clouds, labelled with the share of light the panels get and the
-  angle of incidence.
+  3D view: no more light/dark switch. The sky, light and colours follow the sun
+  in real time, through night, twilight, golden hour and full day, and the
+  header and cards turn light or dark with the sky. Cloud cover now comes from
+  the hourly forecast in Home Assistant (met.no), interpolated to the minute;
+  the panels' output against a clear sky is still shown next to it.
