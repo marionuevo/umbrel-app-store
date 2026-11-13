@@ -699,15 +699,105 @@ for (let i = 0; i < 4; i++) for (const [A, B] of [[tips1, tips2], [tips2, tips3]
   scene.add(shadowy(new THREE.Mesh(new THREE.TubeGeometry(c, 32, .03, 4), M.cable), true, false));
 }
 
-// árboles bajos para dar escala
-function tree(x, z, s = 1, cone = false) {
-  const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s);
-  const trunk = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(.12, .16, 1.2, 6), M.trunk)); trunk.position.y = .6; g.add(trunk);
-  const top = shadowy(new THREE.Mesh(cone ? new THREE.ConeGeometry(1.1, 3, 7) : new THREE.IcosahedronGeometry(1.3, 0), M.leaf));
-  top.position.y = cone ? 2.6 : 2.1; g.add(top);
+// árboles bajos para dar escala. Cada uno son dos mallas (tronco con ramas y follaje), hechas
+// juntando piezas. El follaje lleva color por vértice que multiplica el verde de la paleta: cada
+// mata con su tono y más claro hacia arriba. Las deformaciones dependen solo de la posición, así
+// que los vértices repetidos de una cara a otra se mueven igual y no se abren grietas.
+function treeRand(seed) { let s = seed * 9301 + 49297; return () => ((s = (s * 16807) % 2147483647) / 2147483647); }
+function mergeParts(parts, withColor) {
+  const geos = parts.map(p => (p.g.index ? p.g.toNonIndexed() : p.g));
+  const n = geos.reduce((k, g) => k + g.attributes.position.count, 0);
+  const pos = new Float32Array(n * 3), col = withColor ? new Float32Array(n * 3) : null;
+  let o = 0;
+  geos.forEach((g, j) => {
+    const a = g.attributes.position.array; pos.set(a, o * 3);
+    if (col) { const c = parts[j].c; for (let i = 0; i < a.length / 3; i++) col.set(c, (o + i) * 3); }
+    o += a.length / 3;
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  if (col) geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+// rama o tronco: cilindro de a a b (yUp se declara más abajo)
+const TREE_UP = new THREE.Vector3(0, 1, 0);
+function limb(a, b, r0, r1, seg = 6) {
+  const d = b.clone().sub(a), g = new THREE.CylinderGeometry(r1, r0, d.length(), seg, 1);
+  g.translate(0, d.length() / 2, 0);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(TREE_UP, d.normalize())); g.translate(a.x, a.y, a.z);
+  return g;
+}
+// mata de hojas: icosaedro abollado y algo aplastado
+function clump(c, r, seed) {
+  const g = new THREE.IcosahedronGeometry(1, 1), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const k = 1 + .24 * Math.sin(x * 3.1 + seed) * Math.sin(y * 2.7 + seed * 1.3) * Math.sin(z * 3.3 + seed * .7) + .08 * Math.sin((x + z) * 6 + seed);
+    p.setXYZ(i, x * k * r, y * k * r * .82, z * k * r);
+  }
+  g.translate(c.x, c.y, c.z); return g;
+}
+function leafTone(rnd, y, yLo, yHi, base, hue) {
+  const t = THREE.MathUtils.clamp((y - yLo) / (yHi - yLo), 0, 1), f = base * (.7 + .45 * t) * (.86 + rnd() * .26), h = hue + (rnd() - .5) * .14;
+  return [f * (1 + h), f, f * (1 - h)];
+}
+function broadleaf(rnd) {
+  const wood = [], leaves = [];
+  const lean = new THREE.Vector3((rnd() - .5) * .25, 0, (rnd() - .5) * .25);
+  const top = new THREE.Vector3(0, 1.75, 0).add(lean);
+  const tr = new THREE.CylinderGeometry(.1, .2, 1.75, 7, 3); tr.translate(0, .875, 0);
+  const tp = tr.attributes.position;
+  for (let i = 0; i < tp.count; i++) {   // raíz que se abre y tronco que se inclina
+    const y = tp.getY(i), fl = 1 + .45 * Math.max(0, 1 - y / .35);
+    tp.setXYZ(i, tp.getX(i) * fl + lean.x * y / 1.75, y, tp.getZ(i) * fl + lean.z * y / 1.75);
+  }
+  wood.push({ g: tr });
+  const crownC = new THREE.Vector3(0, 2.6, 0).add(lean);
+  leaves.push({ g: clump(crownC, .85, rnd() * 9), c: 0 });
+  const nb = 3 + Math.floor(rnd() * 2), a0 = rnd() * 6.28;
+  for (let i = 0; i < nb; i++) {
+    const az = a0 + i * 6.28 / nb + (rnd() - .5) * .6, tilt = .75 + rnd() * .35, len = 1.05 + rnd() * .35;
+    const from = new THREE.Vector3(0, 1.15 + rnd() * .5, 0).add(lean.clone().multiplyScalar(.7));
+    const dir = new THREE.Vector3(Math.cos(az) * Math.sin(tilt), Math.cos(tilt), Math.sin(az) * Math.sin(tilt));
+    const end = from.clone().addScaledVector(dir, len);
+    wood.push({ g: limb(from, end, .07, .035, 5) });
+    leaves.push({ g: clump(end.clone().add(new THREE.Vector3(0, .25, 0)), .6 + rnd() * .2, rnd() * 9), c: 0 });
+  }
+  wood.push({ g: limb(new THREE.Vector3(0, 1.6, 0).add(lean), top.clone().add(new THREE.Vector3(0, .9, 0)), .09, .04, 5) });
+  for (let i = 0; i < 4; i++) {   // matas sueltas por arriba y por los lados
+    const az = rnd() * 6.28, el = .2 + rnd() * 1.1;
+    const c = crownC.clone().add(new THREE.Vector3(Math.cos(az) * Math.cos(el), Math.sin(el) * .8, Math.sin(az) * Math.cos(el)).multiplyScalar(1.05));
+    leaves.push({ g: clump(c, .5 + rnd() * .2, rnd() * 9), c: 0 });
+  }
+  for (const l of leaves) { l.g.computeBoundingBox(); const y = (l.g.boundingBox.min.y + l.g.boundingBox.max.y) / 2; l.c = leafTone(rnd, y, 1.7, 3.6, 1, .03); }
+  return { wood, leaves };
+}
+function conifer(rnd) {
+  const wood = [{ g: limb(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 3.6, 0), .17, .05, 6) }], leaves = [];
+  const tiers = 5;
+  for (let i = 0; i < tiers; i++) {
+    const r = 1.15 * (1 - i * .17), h = 1.25 * (1 - i * .09), y0 = .75 + i * .62;
+    const g = new THREE.ConeGeometry(r, h, 10, 2), p = g.attributes.position, sd = rnd() * 9;
+    for (let j = 0; j < p.count; j++) {   // borde dentado y caído
+      const x = p.getX(j), y = p.getY(j), z = p.getZ(j), rho = Math.hypot(x, z) / r, ang = Math.atan2(z, x);
+      const k = 1 + .13 * Math.sin(ang * 5 + sd) * rho;
+      p.setXYZ(j, x * k, y - .16 * rho * rho * (1 + .5 * Math.sin(ang * 3 + sd)), z * k);
+    }
+    g.rotateY(rnd() * 6.28); g.translate(0, y0 + h / 2, 0);
+    leaves.push({ g, c: leafTone(rnd, y0 + h / 2, .9, 3.8, .86, -.05) });
+  }
+  return { wood, leaves };
+}
+const leafMat = M.leaf; leafMat.vertexColors = true;
+function tree(x, z, s = 1, cone = false, seed = 1) {
+  const rnd = treeRand(seed), t = cone ? conifer(rnd) : broadleaf(rnd);
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); g.rotation.y = rnd() * 6.28;
+  g.add(shadowy(new THREE.Mesh(mergeParts(t.wood, false), M.trunk)));
+  g.add(shadowy(new THREE.Mesh(mergeParts(t.leaves, true), leafMat)));
   scene.add(g);
 }
-tree(-10, -5, 1.1); tree(-12, 4, .9); tree(-6, -12, 1.2, true); tree(7, -11, 1); tree(-3, 12, .8); tree(11, -4, .7, true);
+tree(-10, -5, 1.1, false, 1); tree(-12, 4, .9, false, 2); tree(-6, -12, 1.2, true, 3); tree(7, -11, 1, false, 4); tree(-3, 12, .8, false, 5); tree(11, -4, .7, true, 6);
 
 /* ---------- cables con flujo ---------- */
 // Recorrido con esquinas redondeadas; el tubo con flujo se dibuja con un shader que desplaza
