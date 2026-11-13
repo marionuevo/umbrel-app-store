@@ -832,7 +832,7 @@ const SUN_R = 600, SK = SUN_R / 36;
 const sky = new THREE.Group(); scene.add(sky);
 const sunGroup = new THREE.Group(); sky.add(sunGroup);
 const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(1.7 * SK, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd27a, fog: false, transparent: true }));
-sunGroup.add(sunDisc);
+sunGroup.add(sunDisc); sunDisc.renderOrder = -.8;   // antes que la capa de nubes, que lo tapa
 function glowTexture() {
   const c = document.createElement("canvas"); c.width = c.height = 128;
   const x = c.getContext("2d"), g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
@@ -841,7 +841,7 @@ function glowTexture() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), transparent: true, depthWrite: false, fog: false }));
-halo.scale.setScalar(12 * SK); sunGroup.add(halo);
+halo.scale.setScalar(12 * SK); halo.renderOrder = -.8; sunGroup.add(halo);
 
 const arcGroup = new THREE.Group(); sky.add(arcGroup);
 const hourTags = [];
@@ -873,7 +873,7 @@ const stars = (() => {
   }
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   const p = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf7f0e4, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false }));
-  sky.add(p); return p;
+  p.renderOrder = -.8; sky.add(p); return p;
 })();
 
 // Cúpula del cielo: degradado de horizonte a cénit más el resplandor alrededor del sol (ancho y
@@ -895,6 +895,83 @@ const skyDome = new THREE.Mesh(new THREE.SphereGeometry(1000, 48, 24), new THREE
     }` }));
 skyDome.renderOrder = -1; skyDome.frustumCulled = false;
 sky.add(skyDome);
+
+// Capa de nubes del cielo: cada dirección se proyecta sobre un techo plano (d.xz / d.y), así que
+// las nubes se achican y se juntan hacia el horizonte como un cielo de verdad. La forma sale de una
+// textura de ruido fractal repetible hecha aquí; el umbral se saca de la distribución de esa misma
+// textura, de modo que la fracción de cielo tapada coincide con la nubosidad de met.no (44 % → 44 %).
+// Va por delante del sol y las estrellas (los tapa donde hay nube) y por detrás del arco del día.
+const CLOUD_TEX = 256;
+const cloudTex = (() => {
+  const N = CLOUD_TEX, out = new Float32Array(N * N);
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let o = 0, per = 4, amp = 1; o < 6; o++, per *= 2, amp *= .5) {
+    const g = Float32Array.from({ length: per * per }, rnd), cell = N / per;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const fx = x / cell, fy = y / cell, x0 = Math.floor(fx), y0 = Math.floor(fy);
+      let tx = fx - x0, ty = fy - y0; tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+      const x1 = (x0 + 1) % per, y1 = (y0 + 1) % per;
+      const a = g[y0 * per + x0], b = g[y0 * per + x1], c = g[y1 * per + x0], d = g[y1 * per + x1];
+      out[y * N + x] += amp * ((a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty);
+    }
+  }
+  let lo = Infinity, hi = -Infinity; for (const v of out) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  const px = new Uint8Array(N * N); for (let i = 0; i < out.length; i++) px[i] = Math.round((out[i] - lo) / (hi - lo) * 255);
+  const t = new THREE.DataTexture(px, N, N, THREE.RedFormat, THREE.UnsignedByteType);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true; t.needsUpdate = true; t.px = px; return t;
+})();
+// la misma mezcla que el shader (dos escalas de la textura), muestreada en JS con filtro bilineal
+const CLOUD_MIX = [.65, .35], CLOUD_K2 = 3.7, CLOUD_O2 = [.31, .57];
+const cloudQ = (() => {
+  const N = CLOUD_TEX, p = cloudTex.px;
+  const tex = (u, v) => {
+    const x = ((u * N - .5) % N + N) % N, y = ((v * N - .5) % N + N) % N, x0 = Math.floor(x), y0 = Math.floor(y), tx = x - x0, ty = y - y0;
+    const x1 = (x0 + 1) % N, y1 = (y0 + 1) % N, a = p[y0 * N + x0], b = p[y0 * N + x1], c = p[y1 * N + x0], d = p[y1 * N + x1];
+    return ((a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty) / 255;
+  };
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const s = Array.from({ length: 30000 }, () => { const u = rnd() * 4, v = rnd() * 4;
+    return CLOUD_MIX[0] * tex(u, v) + CLOUD_MIX[1] * tex(u * CLOUD_K2 + CLOUD_O2[0], v * CLOUD_K2 + CLOUD_O2[1]); }).sort((a, b) => a - b);
+  return Array.from({ length: 101 }, (_, i) => s[Math.min(s.length - 1, Math.floor(i / 100 * s.length))]);
+})();
+// umbral para que quede tapada la fracción cc (0…1) del cielo; fuera de rango, ni una nube o todo
+function cloudThreshold(cc) {
+  if (cc <= .005) return 2; if (cc >= .995) return -1;
+  const x = (1 - cc) * 100, i = Math.floor(x), k = x - i;
+  return cloudQ[i] + (cloudQ[Math.min(100, i + 1)] - cloudQ[i]) * k;
+}
+// borde suave proporcional a la dispersión del ruido (un valor fijo dejaba huecos falsos al 97 %)
+const cloudU = { uTex: { value: cloudTex }, uT: { value: 2 }, uSoft: { value: (cloudQ[75] - cloudQ[25]) * .12 }, uOff: { value: new THREE.Vector2() },
+  uLit: { value: new THREE.Color() }, uDark: { value: new THREE.Color() }, uHor: skyU.uHor, uGlow: skyU.uGlow, uSun: skyU.uSun,
+  uDense: { value: .4 }, uGlowK: { value: 0 } };
+const cloudLayer = new THREE.Mesh(new THREE.SphereGeometry(500, 48, 24), new THREE.ShaderMaterial({
+  uniforms: cloudU, side: THREE.BackSide, transparent: true, depthWrite: false,
+  vertexShader: `varying vec3 vD; void main() { vD = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D uTex; uniform float uT, uSoft, uDense, uGlowK; uniform vec2 uOff;
+    uniform vec3 uLit, uDark, uHor, uGlow, uSun; varying vec3 vD;
+    void main() {
+      vec3 d = normalize(vD);
+      if (d.y <= 0.0) discard;
+      vec2 p = d.xz / max(d.y, 0.012) * 0.22 + uOff;
+      float n = ${CLOUD_MIX[0]} * texture2D(uTex, p).r
+              + ${CLOUD_MIX[1]} * texture2D(uTex, p * ${CLOUD_K2} + vec2(${CLOUD_O2[0]}, ${CLOUD_O2[1]})).r;
+      float a = smoothstep(uT - uSoft, uT + uSoft, n);
+      if (a < 0.004) discard;
+      // el centro de cada nube, más gris; el borde del lado del sol, con la luz atravesándolo
+      float core = smoothstep(uT, uT + (${(cloudQ[95] - cloudQ[50]).toFixed(4)}), n);
+      vec3 c = mix(uLit, uDark, core * uDense);
+      float s = max(dot(d, uSun), 0.0);
+      c += uGlow * (pow(s, 6.0) * 0.35 + pow(s, 40.0) * 0.6) * (1.0 - core) * uGlowK;
+      // hacia el horizonte se funden con la bruma y se vuelven transparentes justo en la línea
+      float far = smoothstep(0.02, 0.35, d.y);
+      c = mix(uHor, c, 0.35 + 0.65 * far);
+      a *= smoothstep(0.0, 0.05, d.y);
+      gl_FragColor = vec4(c, a);
+      #include <colorspace_fragment>
+    }` }));
+cloudLayer.renderOrder = -.5; cloudLayer.frustumCulled = false;
+sky.add(cloudLayer);
 
 // Nubes: un solo InstancedMesh de bolas aplastadas (una llamada de dibujo). Se ven tantas como
 // diga la nubosidad y se mueven con el viento de met.no.
@@ -929,6 +1006,11 @@ function placeClouds(dt = 0) {
     }
   });
   cloudMesh.instanceMatrix.needsUpdate = true;
+  // la capa del cielo avanza con el mismo viento (más despacio: está lejos) y tapa la fracción cloud
+  cloudU.uOff.value.x -= wind.x * windSpeed * dt * .004; cloudU.uOff.value.y -= wind.z * windSpeed * dt * .004;
+  cloudU.uOff.value.x %= 64; cloudU.uOff.value.y %= 64;
+  cloudU.uT.value = cloudThreshold(cloud);
+  cloudLayer.visible = cloud > .005;
 }
 placeClouds();
 // Lluvia: trazos que caen bajo las nubes, alrededor de la casa. Cada gota es un segmento con su
@@ -1112,7 +1194,7 @@ function updateSun() {
   // cielo: cénit y horizonte de la tabla; las nubes lo agrisan (gris de noche … gris de día)
   const [zen, hor, glow] = [skyU.uZen.value, skyU.uHor.value, skyU.uGlow.value];
   skyAt(el, [zen, hor, glow]);
-  const oc = cloud * .85;
+  const oc = cloud * cloud * .75;   // la capa de nubes ya tapa su parte; esto es la bruma de un cielo cubierto
   zen.lerp(tmpC.set(0x141c28).lerp(tmpC2.set(0x9aa3ad), day), oc);
   hor.lerp(tmpC.set(0x1b2432).lerp(tmpC2.set(0xc8ccd0), day), oc);
   zen.multiplyScalar(1 - .3 * rain); hor.multiplyScalar(1 - .25 * rain);
@@ -1122,11 +1204,21 @@ function updateSun() {
   // en el crepúsculo el cielo aún alumbra el suelo aunque el sol ya no llegue
   const twilight = THREE.MathUtils.smoothstep(el, -12, 0) * (1 - day);
   hemi.intensity = (.35 + .55 * lit) + day * (.75 - .15 * lit) + day * cloud * .3 + twilight * .9;
-  stars.material.opacity = (1 - THREE.MathUtils.smoothstep(el, -14, -5)) * .85 * (1 - cloud * .9);
+  stars.material.opacity = (1 - THREE.MathUtils.smoothstep(el, -14, -5)) * .85 * (1 - cloud * .4);   // las tapa la capa, donde hay nube
   // algo de luz propia para que la cara a la sombra no quede gris oscuro; más gris cuanto más cubierto
   cloudMat.color.copy(pal.cloud).lerp(pal.cloudDark, Math.max(cloud * cloud * .6, 1 - day, rain * 1.1) * .8);
   cloudMat.emissive.copy(cloudMat.color).multiplyScalar(.35 * day + .08);
-  sunDisc.material.opacity = 1 - cloud * .7; halo.material.opacity = 1 - cloud * .85;
+  sunDisc.material.opacity = 1 - cloud * .35; halo.material.opacity = 1 - cloud * .6;
+  // capa de nubes: blancas de día, gris pizarra de noche, teñidas de naranja con el sol bajo; el
+  // centro se oscurece más cuanto más cubierto y con lluvia
+  const warm = low * THREE.MathUtils.smoothstep(el, -7, 1) * (1 - cloud * .5);
+  // gris neutro (un gris azulado se confundía con los claros); cuanto más cubierto, más gris y con
+  // menos contraste, como una capa de estratos
+  const ov = cloud * cloud;
+  cloudU.uLit.value.set(0x2b3446).lerp(tmpC.set(0xf6f7f9).lerp(tmpC2.set(0xc4c7cb), ov), day).lerp(glow, warm * .55).multiplyScalar(1 - .35 * rain);
+  cloudU.uDark.value.set(0x151b25).lerp(tmpC.set(0xa3a6aa).lerp(tmpC2.set(0x8f9397), ov), day).lerp(tmpC.set(0x6a5560), warm * .4).multiplyScalar(1 - .3 * rain);
+  cloudU.uDense.value = Math.min(1, .55 + .25 * cloud + .4 * rain);
+  cloudU.uGlowK.value = THREE.MathUtils.smoothstep(el, -8, -1) * (.5 + .8 * low);
   if (s && el > -2) {
     const dir = sunDir(s.az, Math.max(el, .5));
     sunGroup.position.copy(dir).multiplyScalar(SUN_R); sunGroup.visible = el > -1.5;

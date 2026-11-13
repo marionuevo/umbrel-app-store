@@ -3,7 +3,7 @@ id: marionuevo-fv-panel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fv-panel/icon.svg
 category: automation
 name: Solar Live
-version: "1.11.0"
+version: "1.12.0"
 tagline: Live solar production and home consumption
 description: >
   Solar monitoring panel connected to the Home Assistant websocket: energy flows
@@ -26,7 +26,9 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  3D view: rain. It falls from the clouds with the forecast's millimetres per
-  hour for the hour (from drizzle to a downpour), slanted by the wind; it also
-  rains when Home Assistant reports rain right now. The ground and roof look
-  wet, the sky and clouds turn darker and the sun's beam and shadows fade.
+  3D view: the clouds now cover as much of the sky as the forecast says. A
+  cloud layer across the whole sky shrinks and bunches up towards the horizon
+  and drifts with the wind; at 44% cloud cover about 44% of the sky is cloudy,
+  and at 97% it is overcast. Before, only two or three clouds ever fitted in
+  the view, whatever the weather. The layer turns warm at sunset, grey when it
+  rains, and at night it hides the stars where there are clouds.
