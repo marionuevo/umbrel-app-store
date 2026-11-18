@@ -32,6 +32,7 @@ El repo es público. Los nombres de los nadadores, la destacada y el webhook sol
 |---|---|
 | `config.json` | Webhook de HA, URL de la guía para el aviso, destacada, club destacado, alias de clubes y antelaciones. Modelo en `config.example.json` |
 | `jornada.json` | `{jornada: {nombre, inicio (ISO UTC), calles, simulado}, pruebas: [{n, nombre, sexo, pausa_s, series: [{n, duracion_s, calles: {"3": {nombre, año, club, marca, piscina}}}]}]}` |
+| | Con varias sesiones, la primera prueba de cada una lleva `inicio` (ISO UTC). Esa sesión empieza a esa hora, o al acabar la anterior si se alarga; la `pausa_s` de la prueba anterior se ignora (sirve para versiones anteriores a la 1.0.8). El marcador solo mueve hacia atrás su propia sesión. |
 | `estado.json` | Ancla, filtros, avisos ya enviados e historial. Lo escribe la app |
 
 Las jornadas se generan en `~/AIWork/natacion-liga26-27/` (`scripts/simular_series.py` mientras no haya listas de salida oficiales). Para cambiar de jornada: copiar el nuevo `jornada.json` a `data/` y mandar `estado.json` a la papelera.

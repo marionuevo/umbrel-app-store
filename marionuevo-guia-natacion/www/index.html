@@ -286,9 +286,14 @@ function renderNow(){
     const mins = Math.round((S.inicios[0] - t) / 60000);
     html = `<p class="label">Antes de empezar</p><p class="now-title">Empieza a las ${hm(S.inicios[0])}</p>
       <div class="now-meta">${mins > 90 ? `Faltan ${Math.floor(mins/60)} h ${mins%60} min` : `Faltan ${mins} min`} · ${S.pruebas.length} pruebas, ${total} series</div>`;
+  } else if (c + 1 < total && flat[c+1].p.inicio && flat[c+1].s.n === 1 && t >= S.inicios[c] + flat[c].s.duracion_s * 1000) {
+    // Entre sesiones: la última serie ya acabó y la siguiente sesión tiene su propia hora
+    const mins = Math.round((S.inicios[c+1] - t) / 60000), q = flat[c+1].p;
+    html = `<p class="label">Descanso entre sesiones</p><p class="now-title">Sigue a las ${hm(S.inicios[c+1])}</p>
+      <div class="now-meta">${mins > 90 ? `Faltan ${Math.floor(mins/60)} h ${mins%60} min` : `Faltan ${mins} min`} · Prueba ${q.n} de ${ultimaP()}, ${esc(q.nombre)} ${SEXO[q.sexo]}</div>`;
   } else {
     const {p, s} = flat[c];
-    const fin = c + 1 < total ? S.inicios[c+1] : S.inicios[c] + s.duracion_s * 1000;
+    const fin = c + 1 < total && !(flat[c+1].p.inicio && flat[c+1].s.n === 1) ? S.inicios[c+1] : S.inicios[c] + s.duracion_s * 1000;
     const pct = Math.min(100, Math.max(0, (t - S.inicios[c]) / (fin - S.inicios[c]) * 100));
     html = `<p class="label">Nadando ahora</p>
       <p class="now-title">Prueba ${p.n} de ${ultimaP()} · Serie ${s.n} de ${p.series.length}</p>
@@ -341,7 +346,7 @@ function renderTimeline(){
   S.pruebas.forEach(p => {
     const idx = flat.filter(f => f.p === p).map(f => f.i);
     const first = idx[0], last = idx[idx.length-1];
-    const fin = last + 1 < flat.length ? S.inicios[last+1] - (p.pausa_s||0)*1000 : S.inicios[last] + p.series[p.series.length-1].duracion_s*1000;
+    const fin = S.inicios[last] + p.series[p.series.length-1].duracion_s*1000;
     const cnt = {hija:0, club:0, filtro:0};
     p.series.forEach(s => interest(s,'ver').forEach(e => cnt[e[2]]++));
     const dots = (cnt.hija ? `<span class="dot hija">${esc(S.destacada.alias||'')}</span>` : '') +

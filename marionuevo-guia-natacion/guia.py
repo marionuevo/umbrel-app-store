@@ -99,26 +99,57 @@ def series_planas(jor):
     for pi, p in enumerate(pruebas):
         for s in p["series"]:
             ultima = s["n"] == len(p["series"]) and pi < len(pruebas) - 1
+            # «inicio» en la primera prueba de una sesión: esa sesión no empieza antes de esa hora
+            ses = iso_ms(p["inicio"]) if s["n"] == 1 and pi > 0 and p.get("inicio") else None
             plano.append({"id": f"P{p['n']}S{s['n']}", "p": p["n"], "s": s["n"], "ns": len(p["series"]),
                           "dur": s["duracion_s"], "pausa": p.get("pausa_s", 0) if ultima else 0,
-                          "prueba": p, "serie": s})
+                          "ses": ses, "prueba": p, "serie": s})
     return plano
 
 
+def iso_ms(t):
+    return int(dt.datetime.fromisoformat(t.replace("Z", "+00:00")).timestamp() * 1000)
+
+
 def inicio_oficial_ms(jor):
-    return int(dt.datetime.fromisoformat(jor["jornada"]["inicio"].replace("Z", "+00:00")).timestamp() * 1000)
+    return iso_ms(jor["jornada"]["inicio"])
+
+
+PAUSA_SESION_S = 15  # si una sesión se alarga hasta la hora de la siguiente
+
+
+def siguiente(plano, ini, i):
+    """Inicio de la serie i a partir de la anterior. Al empezar sesión manda su hora
+    oficial (la pausa larga de la prueba anterior se ignora), salvo que la sesión
+    anterior vaya tan retrasada que acabe después."""
+    prev = plano[i - 1]
+    if plano[i]["ses"] is not None:
+        return max(plano[i]["ses"], ini[i - 1] + 1000 * (prev["dur"] + PAUSA_SESION_S))
+    return ini[i - 1] + 1000 * (prev["dur"] + prev["pausa"])
 
 
 def horario(plano, jor, ancla):
-    """Hora de inicio estimada (ms) de cada serie a partir del ancla."""
-    i0, t0 = (ancla["i"], ancla["t"]) if ancla else (0, inicio_oficial_ms(jor))
-    i0 = max(0, min(i0, len(plano) - 1))
+    """Hora de inicio estimada (ms) de cada serie a partir del ancla.
+
+    Con sesiones (pruebas con «inicio»), el ancla solo mueve su sesión hacia atrás:
+    las sesiones anteriores siguen el horario oficial y las siguientes empiezan a su
+    hora, o al acabar la del ancla si se alarga."""
     ini = [0] * len(plano)
-    ini[i0] = t0
+    if not plano:
+        return ini
+    ini[0] = inicio_oficial_ms(jor)
+    for i in range(1, len(plano)):
+        ini[i] = siguiente(plano, ini, i)
+    if not ancla:
+        return ini
+    i0 = max(0, min(ancla["i"], len(plano) - 1))
+    ini[i0] = ancla["t"]
     for i in range(i0 + 1, len(plano)):
-        ini[i] = ini[i - 1] + 1000 * (plano[i - 1]["dur"] + plano[i - 1]["pausa"])
-    for i in range(i0 - 1, -1, -1):
+        ini[i] = siguiente(plano, ini, i)
+    i = i0 - 1
+    while i >= 0 and plano[i + 1]["ses"] is None:
         ini[i] = ini[i + 1] - 1000 * (plano[i]["dur"] + plano[i]["pausa"])
+        i -= 1
     return ini
 
 
