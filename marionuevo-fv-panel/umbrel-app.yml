@@ -3,7 +3,7 @@ id: marionuevo-fv-panel
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-fv-panel/icon.svg
 category: automation
 name: Solar Live
-version: "1.13.0"
+version: "1.13.1"
 tagline: Live solar production and home consumption
 description: >
   Solar monitoring panel connected to the Home Assistant websocket: energy flows
@@ -26,8 +26,6 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 releaseNotes: >
-  3D view: more detailed trees. The broadleaf trees have a flared, leaning
-  trunk with branches and a crown of separate leaf clumps in slightly
-  different greens, lighter towards the top; the conifers have drooping,
-  jagged tiers. The clouds now cover as much of the sky as the forecast says,
-  with a cloud layer across the whole sky instead of the old 3D puff clouds.
+  Security: nginx updated from 1.31.6 to 1.31.9, which fixes the five
+  NGINX2Root vulnerabilities (CVE-2026-123007 and others) published on
+  18 November 2026. No other changes.

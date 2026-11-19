@@ -3,7 +3,7 @@ id: marionuevo-nginx-md
 icon: https://raw.githubusercontent.com/marionuevo/umbrel-app-store/main/marionuevo-nginx-md/icon.svg
 category: networking
 name: Nginx Md
-version: "1.2.0"
+version: "1.2.1"
 tagline: Servidor nginx para mis sitios estáticos
 description: >
   Sirve sitios estáticos y su configuración nginx desde carpetas elegidas en
@@ -38,6 +38,6 @@ folderAccess:
         targetPath: /var/log/nginx
         readOnly: false
 releaseNotes: >
-  Preparación para umbrelOS 2.0: las carpetas de configuración, sitios y logs
-  se seleccionan desde Ajustes de la app. Selecciona la misma carpeta de logs
-  también en Estadísticas Web antes de actualizar.
+  Seguridad: nginx pasa de 1.31.6 a 1.31.9, que corrige las cinco
+  vulnerabilidades NGINX2Root (CVE-2026-123007 y otras) publicadas el
+  18 de noviembre de 2026. No cambia nada más.
