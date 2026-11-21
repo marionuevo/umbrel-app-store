@@ -111,6 +111,21 @@ main{padding:12px max(16px,env(safe-area-inset-right,0px)) calc(96px + env(safe-
 .btn.block{width:100%;margin-top:10px}
 .gap{display:block;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:none;color:var(--muted);padding:8px 12px;font-size:13px;cursor:pointer}
 
+/* Separadores de la línea de tiempo cuando la competición tiene varios días o sesiones */
+#timeline > :first-child{margin-top:0}
+.day-sep{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:18px;padding:0 2px 7px;border-bottom:2px solid var(--ink)}
+.day-sep h2{margin:0;font:700 26px/1 var(--display);letter-spacing:.01em}
+.day-sep span{color:var(--muted);font-size:13px;white-space:nowrap}
+.ses-sep{display:flex;align-items:center;gap:10px;margin-top:4px}
+.ses-sep::before,.ses-sep::after{content:"";flex:1;height:1px;background:var(--accent);opacity:.55}
+.ses-sep div{text-align:center;min-width:0}
+.ses-sep b{display:block;font:700 15px/1.15 var(--display);letter-spacing:.09em;text-transform:uppercase;color:var(--accent)}
+.ses-sep span{display:block;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ses-sep .st{display:inline-block;margin-left:6px;font:600 10.5px var(--body);letter-spacing:.06em;border-radius:4px;padding:1px 5px;vertical-align:2px}
+.ses-sep .st.live{background:var(--now);color:#fff}
+.ses-sep .st.done{border:1px solid var(--line);color:var(--muted)}
+.ses-sep.done{opacity:.6}
+
 .dock{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);
   padding:8px max(12px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));
   display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
@@ -341,9 +356,47 @@ function heatHTML(i, c){
   return h;
 }
 
+// Sesiones: la primera prueba y cada prueba con «inicio» abren una. Días: fecha local del inicio de cada sesión
+const fecha = ms => new Date(ms).toLocaleDateString('en-CA',{timeZone:TZ});
+function sesiones(){
+  const out = [];
+  S.pruebas.forEach((p, pi) => { if (pi === 0 || p.inicio) out.push({pi, pruebas:[]}); out[out.length-1].pruebas.push(p); });
+  const dias = [];
+  out.forEach((x, k) => {
+    const idx = flat.filter(f => x.pruebas.includes(f.p)).map(f => f.i);
+    x.k = k; x.first = idx[0]; x.last = idx[idx.length-1];
+    x.ini = S.inicios[x.first]; x.fin = S.inicios[x.last] + flat[x.last].s.duracion_s * 1000;
+    x.dia = fecha(x.ini);
+    if (!dias.includes(x.dia)) dias.push(x.dia);
+    x.d = dias.indexOf(x.dia);
+  });
+  out.forEach(x => { x.nd = dias.length; x.delDia = out.filter(y => y.dia === x.dia); });
+  return out;
+}
+function diaHTML(x){
+  const txt = new Date(x.ini).toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',timeZone:TZ}).replace(',', '');
+  const n = x.delDia.length;
+  return `<div class="day-sep" id="dia${x.d+1}"><h2>${esc(txt[0].toUpperCase() + txt.slice(1))}</h2><span>Día ${x.d+1} de ${x.nd} · ${n} ${n === 1 ? 'sesión' : 'sesiones'}</span></div>`;
+}
+function sesionHTML(x, total, c){
+  const t = now();
+  const hecha = c > x.last || (c === x.last && t >= x.fin), viva = !hecha && c >= x.first;
+  const turno = new Date(x.ini).toLocaleTimeString('en-GB',{hour:'2-digit',hour12:false,timeZone:TZ}) < '14' ? 'mañana' : 'tarde';
+  const ps = x.pruebas.map(p => p.n);
+  return `<div class="ses-sep${hecha ? ' done' : ''}" id="ses${x.k+1}"><div>
+    <b>Sesión ${x.k+1} de ${total} · ${turno}${viva ? '<span class="st live">En curso</span>' : hecha ? '<span class="st done">Terminada</span>' : ''}</b>
+    <span>Pruebas ${ps[0]}–${ps[ps.length-1]} · ${hm(x.ini)}–${hm(x.fin)}</span></div></div>`;
+}
+
 function renderTimeline(){
   const c = curIndex(); const solo = filtros.ver.solo_interes; let out = '';
+  const ses = sesiones(), abre = new Map(ses.map(x => [x.pruebas[0], x]));
   S.pruebas.forEach(p => {
+    const x = abre.get(p);
+    if (x) {
+      if (x.nd > 1 && (x.k === 0 || ses[x.k-1].dia !== x.dia)) out += diaHTML(x);
+      if (ses.length > 1) out += sesionHTML(x, ses.length, c);
+    }
     const idx = flat.filter(f => f.p === p).map(f => f.i);
     const first = idx[0], last = idx[idx.length-1];
     const fin = S.inicios[last] + p.series[p.series.length-1].duracion_s*1000;
